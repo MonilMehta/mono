@@ -23,6 +23,7 @@ import {
   parseJson,
   computeStats,
   formatBytes,
+  deleteAtPath,
   type JsonStats,
   type ParseError,
 } from '@/lib/json-utils';
@@ -149,6 +150,20 @@ export default function JsonTool() {
   const handleCollapseAll = () => setExpandMode('collapse');
   const handleResetExpand = () => setExpandMode('default');
 
+  const handleTreeDelete = useCallback(
+    (path: string) => {
+      if (!parsedData) return;
+      const newData = deleteAtPath(parsedData, path);
+      const formatted = JSON.stringify(newData, null, 2);
+      skipDebounceRef.current = true;
+      setParsedData(newData);
+      setOutput(formatted);
+      setInput(formatted);
+      setStats(computeStats(formatted, newData));
+    },
+    [parsedData]
+  );
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchQuery(searchInput);
@@ -257,7 +272,12 @@ export default function JsonTool() {
   const getOutputContent = () => {
     if (activeTab === 'tree' && parsedData) {
       return (
-        <JsonViewer data={parsedData} searchQuery={searchQuery} expandMode={expandMode} />
+        <JsonViewer
+          data={parsedData}
+          searchQuery={searchQuery}
+          expandMode={expandMode}
+          onDelete={handleTreeDelete}
+        />
       );
     }
     if (activeTab === 'minified' && parsedData) {

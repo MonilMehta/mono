@@ -21,6 +21,12 @@ import ImageTool from '@/components/tools/image-tool';
 import SvgTool from '@/components/tools/svg-tool';
 import BlurhashTool from '@/components/tools/blurhash-tool';
 import AppAssetTool from '@/components/tools/app-asset-tool';
+import CsvTool from '@/components/tools/csv-tool';
+import TypegenTool from '@/components/tools/typegen-tool';
+import CurlTool from '@/components/tools/curl-tool';
+import MockerTool from '@/components/tools/mocker-tool';
+import LogTool from '@/components/tools/log-tool';
+import StackTool from '@/components/tools/stack-tool';
 
 const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   json: JsonTool,
@@ -37,6 +43,12 @@ const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   svg: SvgTool,
   blurhash: BlurhashTool,
   'app-asset': AppAssetTool,
+  csv: CsvTool,
+  typegen: TypegenTool,
+  curl: CurlTool,
+  mocker: MockerTool,
+  log: LogTool,
+  stack: StackTool,
 };
 
 function isEditableTarget(target: EventTarget | null): boolean {

@@ -16,17 +16,25 @@ A fast, keyboard-first collection of daily developer utilities — built for eng
 
 | Tool | Category | What it does |
 |---|---|---|
-| **JSON** | Data | Format, validate, and explore large JSON payloads. Live tree view with search, expand/collapse all, copy path/value per node, line/column error pointers, drag-and-drop file upload, debounced parsing so large payloads don't freeze the tab |
+| **JSON** | Data | Format, validate, and explore large JSON payloads. Live tree view with search, expand/collapse all, copy path/value per node, delete nodes from the tree, line/column error pointers, drag-and-drop file upload, debounced parsing so large payloads don't freeze the tab |
 | **Diff** | Data | Line-by-line comparison of two blocks of text/JSON with an LCS-based diff, add/remove counts |
+| **CSV** | Data | Convert CSV/TSV ↔ JSON, or export JSON arrays as Markdown tables. Auto-detects delimiter |
+| **TypeGen** | Data | Generate TypeScript interfaces/types or Zod schemas from JSON, with optional/readonly toggles |
+| **cURL** | Data | Paste a curl command and generate fetch, Axios, Python requests, undici, React Query, or React Native-safe fetch |
+| **Mocker** | Data | From an API JSON response: TypeScript types, Zod schemas, sample mocks, factory functions, and MSW handlers |
 | **JWT** | Auth | Decode a Bearer token's header and payload, flag expired tokens, copy signature |
 | **Base64** | Encode | Encode/decode strings, with a URL-safe mode |
 | **URL** | Encode | Encode/decode URL components, or parse a full URL into origin/path/query params |
 | **Timestamp** | Time | Unix ↔ ISO conversion, live clock, human-readable relative time ("2 hours ago") |
 | **UUID** | Generate | Generate one or many cryptographically random UUID v4s |
-| **Image** | Media | Drag-and-drop image inspector — dimensions, aspect ratio, size, MIME type. Compress/convert to JPEG, WebP, or PNG with a quality slider and % savings. Base64 data URI export |
+| **Image** | Media | Drag-and-drop image inspector — dimensions, aspect ratio, size, MIME type. Compress/convert to JPEG, WebP, or PNG. Resize with aspect lock and presets. Extract dominant palette (hex/RGB/HSL). Base64 data URI export |
 | **SVG** | Media | Paste or upload an SVG — live preview, minify (with % size saved), export as a React JSX component, export as React Native (`react-native-svg`) component, URL-encoded and Base64 data URIs |
+| **BlurHash** | Mobile | Upload an image to generate BlurHash and ThumbHash strings plus an Expo Image usage snippet |
+| **App Assets** | Mobile | Upload one logo and generate Expo icon, adaptive icon, splash, and favicon sizes with a ready-to-paste `app.json` snippet |
 | **Color** | Design | Convert between Hex, RGB, and HSL with a live swatch and color picker; copy in Tailwind/React Native formats |
 | **Regex** | Debug | Test regular expressions live against a sample string with match highlighting and per-match details |
+| **Logs** | Debug | Paste messy logs — timestamp highlighting, JSON extraction, level filtering, error grouping, stack attachment |
+| **Stack Trace** | Debug | Clean JS/RN/Next stack traces — separate app frames from node_modules, compact view, copy cleaned stack |
 | **Deep Link** | Mobile | Build Expo deep links — custom scheme, Expo Go dev links, or universal links — with query params and a ready-to-paste `app.json` snippet |
 
 ### 🎨 UI
@@ -80,14 +88,17 @@ components/
   copy-button.tsx         Reusable "copy to clipboard" button
   highlighted-text.tsx    Search-match text highlighter
   json-viewer.tsx         Collapsible/searchable JSON tree view
-  tools/                  One component per tool (json, jwt, base64, url,
-                           timestamp, uuid, color, diff, regex, deeplink,
-                           image, svg)
+  tools/                  One component per tool
 
 lib/
   tools-registry.ts      Tool metadata: id, label, description, category, icon
   fuzzy.ts                Fuzzy string matching used by the command palette
-  json-utils.ts           JSON parsing, stats, and error-location helpers
+  json-utils.ts           JSON parsing, stats, path delete, and error-location helpers
+  json-to-ts.ts           JSON → TypeScript / Zod / mock helpers
+  csv-utils.ts            CSV/TSV ↔ JSON ↔ Markdown table
+  curl-parser.ts          cURL parse + code generators
+  log-utils.ts            Log parsing, level filter, error grouping
+  stack-utils.ts          Stack trace parse & clean
   debounce.ts             Debounce utility (used for JSON live-parsing)
   theme.ts                Card shadow tokens for light/dark mode
   utils.ts                Tailwind class merge helper (`cn`)
@@ -103,27 +114,18 @@ That's it — the sidebar, command palette, and keyboard shortcuts pick it up au
 
 ## Roadmap / Future Tools
 
-### Media & assets
+### Media & assets (polish)
 
-- **Image Resizer**: Resize by width/height, percentage, or with aspect-ratio lock. Preset sizes for app icon, OG image, story, square, splash, and banner.
-- **App Asset Generator**: Upload one image and generate iOS icon sizes, Android icon sizes, adaptive icon foreground/background checks, splash screen sizes, favicon sizes, and a ready-to-paste `app.json` / `app.config.ts` snippet. Built for Expo / React Native.
-- **BlurHash / ThumbHash Generator**: Upload an image to generate a BlurHash string, ThumbHash string, live preview placeholder, and a React Native usage snippet.
-- **Palette Extractor**: Upload an image to extract a dominant palette and muted/vibrant colors. Copy as hex/RGB/HSL, or export Tailwind tokens, CSS variables, and a React Native theme object.
+- **Image Resizer**: percentage-based resize; more presets (app icon, splash, banner)
+- **App Asset Generator**: full iOS/Android size matrices, adaptive icon fg/bg checks, `app.config.ts` snippet
+- **BlurHash**: live decoded placeholder preview
+- **Palette Extractor**: muted/vibrant colors; export Tailwind tokens, CSS variables, RN theme object
 
 ### Typography
 
 - **Font Inspector**: Upload `.ttf`, `.otf`, `.woff`, or `.woff2` and inspect font family name, style, weight, glyph count, supported characters, file size, format, and naming metadata.
 - **Type Scale Generator**: Input a base size and ratio to generate `xs` through `5xl` with font size, line height, and letter spacing. Export as CSS variables, Tailwind config, or React Native tokens.
 - **Line-Height Calculator**: Enter a font size and get a recommended line height. Convert px ↔ unitless, with React Native style and CSS output.
-
-### Data & API
-
-- **Log Formatter**: Paste messy logs and get timestamp highlighting, JSON object extraction, error grouping, stack trace formatting, and filtering by level (error/warn/info).
-- **Stack Trace Cleaner**: Paste stack traces from JS/RN/Next to separate app frames from node_modules, generate clean clickable-looking file paths, view compactly, and extract error messages.
-- **CSV / TSV / JSON Converter**: Convert between CSV, TSV, and JSON. Turn arrays of objects into tables and copy as Markdown tables.
-- **cURL → Code Converter**: Paste a cURL command and generate fetch, Axios, Python requests, Node undici, React Query mutation/query, and Expo/React Native-safe fetch snippets.
-- **API Response Mocker**: Paste JSON and generate TypeScript types, Zod schemas, sample mock objects, factory functions, and MSW handlers.
-- **TypeScript Type Generator**: Input JSON and output TypeScript interfaces/types, complete with optional fields detection, union handling, readonly toggles, and Zod schema generation.
 
 ## Privacy
 

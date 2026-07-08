@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { ChevronRight, Copy, Check } from 'lucide-react';
+import { ChevronRight, Copy, Check, Trash2 } from 'lucide-react';
 import { HighlightedText } from '@/components/highlighted-text';
 
 const ARRAY_PAGE_SIZE = 100;
@@ -13,6 +13,7 @@ interface TreeContextValue {
   expandMode: ExpandMode;
   copiedPath: string | null;
   setCopiedPath: (path: string | null) => void;
+  onDelete?: (path: string) => void;
 }
 
 const TreeContext = createContext<TreeContextValue>({
@@ -58,17 +59,19 @@ interface JsonViewerProps {
   searchQuery?: string;
   expandMode?: ExpandMode;
   onExpandModeChange?: (mode: ExpandMode) => void;
+  onDelete?: (path: string) => void;
 }
 
 export default function JsonViewer({
   data,
   searchQuery = '',
   expandMode = 'default',
+  onDelete,
 }: JsonViewerProps) {
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
 
   return (
-    <TreeContext.Provider value={{ searchQuery, expandMode, copiedPath, setCopiedPath }}>
+    <TreeContext.Provider value={{ searchQuery, expandMode, copiedPath, setCopiedPath, onDelete }}>
       <JsonNode value={data} path="$" depth={0} />
     </TreeContext.Provider>
   );
@@ -84,7 +87,7 @@ interface JsonNodeProps {
 }
 
 const JsonNode: React.FC<JsonNodeProps> = ({ value, path, depth, name }) => {
-  const { searchQuery, expandMode, copiedPath, setCopiedPath } = useContext(TreeContext);
+  const { searchQuery, expandMode, copiedPath, setCopiedPath, onDelete } = useContext(TreeContext);
   const hasSearch = searchQuery.trim().length > 0;
   const shouldAutoExpand = hasSearch && subtreeMatches(value, name, searchQuery);
 
@@ -115,7 +118,7 @@ const JsonNode: React.FC<JsonNodeProps> = ({ value, path, depth, name }) => {
   );
 
   const nodePath = buildPath(path === '$' && name ? '$' : path, name);
-  const isMatch = matchesSearch(value, name, searchQuery);
+  const canDelete = Boolean(onDelete && nodePath !== '$');
 
   const PathActions = ({ copyValue, isObject }: { copyValue: unknown, isObject?: boolean }) => (
     <span className="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-2">
@@ -142,6 +145,19 @@ const JsonNode: React.FC<JsonNodeProps> = ({ value, path, depth, name }) => {
       >
         {copiedPath === `val-${nodePath}` ? <Check size={10} className="text-primary" /> : <Copy size={10} />}
       </button>
+      {canDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete?.(nodePath);
+          }}
+          className="p-1 rounded-md bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center gap-1"
+          title="Remove from response"
+        >
+          <Trash2 size={10} />
+        </button>
+      )}
     </span>
   );
 
@@ -293,7 +309,6 @@ interface ArrayNodeProps {
   isExpanded: boolean;
   onToggle: () => void;
   searchQuery: string;
-  matchClass: string;
 }
 
 const ArrayNode: React.FC<ArrayNodeProps> = ({
@@ -305,6 +320,8 @@ const ArrayNode: React.FC<ArrayNodeProps> = ({
   onToggle,
   searchQuery,
 }) => {
+  const { onDelete } = useContext(TreeContext);
+  const canDelete = Boolean(onDelete && path !== '$');
   const [visibleCount, setVisibleCount] = useState(ARRAY_PAGE_SIZE);
   const isEmpty = value.length === 0;
   const hasMore = value.length > visibleCount;
@@ -360,6 +377,19 @@ const ArrayNode: React.FC<ArrayNodeProps> = ({
           >
             <Copy size={10} />
           </button>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete?.(path);
+              }}
+              className="p-1 rounded-md bg-destructive/10 hover:bg-destructive/20 text-destructive flex items-center gap-1"
+              title="Remove from response"
+            >
+              <Trash2 size={10} />
+            </button>
+          )}
         </span>
       </div>
       {isExpanded && !isEmpty && (

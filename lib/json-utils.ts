@@ -100,3 +100,56 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
+
+export function parseJsonPath(path: string): (string | number)[] {
+  if (path === '$') return [];
+  const rest = path.startsWith('$.') ? path.slice(2) : path.startsWith('$') ? path.slice(1) : path;
+  const segments: (string | number)[] = [];
+
+  let remaining = rest;
+  while (remaining.length > 0) {
+    if (remaining.startsWith('.')) remaining = remaining.slice(1);
+    if (remaining.startsWith('[')) {
+      const match = remaining.match(/^\[(\d+)\]/);
+      if (!match) break;
+      segments.push(parseInt(match[1], 10));
+      remaining = remaining.slice(match[0].length);
+    } else {
+      const match = remaining.match(/^([^.\[]+)/);
+      if (!match) break;
+      segments.push(match[1]);
+      remaining = remaining.slice(match[0].length);
+    }
+  }
+
+  return segments;
+}
+
+export function deleteAtPath(data: unknown, path: string): unknown {
+  if (path === '$') return data;
+
+  const segments = parseJsonPath(path);
+  if (segments.length === 0) return data;
+
+  const clone = structuredClone(data);
+  let parent: unknown = clone;
+
+  for (let i = 0; i < segments.length - 1; i++) {
+    const seg = segments[i];
+    if (typeof seg === 'number') {
+      parent = (parent as unknown[])[seg];
+    } else {
+      parent = (parent as Record<string, unknown>)[seg];
+    }
+    if (parent === undefined) return data;
+  }
+
+  const last = segments[segments.length - 1];
+  if (typeof last === 'number' && Array.isArray(parent)) {
+    parent.splice(last, 1);
+  } else if (typeof last === 'string' && parent !== null && typeof parent === 'object' && !Array.isArray(parent)) {
+    delete (parent as Record<string, unknown>)[last];
+  }
+
+  return clone;
+}

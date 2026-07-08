@@ -14,6 +14,12 @@ import {
   PenTool,
   Hash,
   Layers,
+  Table2,
+  FileCode2,
+  Terminal,
+  Boxes,
+  ScrollText,
+  Bug,
 } from 'lucide-react';
 
 export type ToolId =
@@ -30,7 +36,13 @@ export type ToolId =
   | 'image'
   | 'svg'
   | 'blurhash'
-  | 'app-asset';
+  | 'app-asset'
+  | 'csv'
+  | 'typegen'
+  | 'curl'
+  | 'mocker'
+  | 'log'
+  | 'stack';
 
 export interface ToolDef {
   id: ToolId;
@@ -44,6 +56,10 @@ export interface ToolDef {
 export const TOOLS: ToolDef[] = [
   { id: 'json', label: 'JSON', description: 'Format, validate & explore', category: 'data', icon: Braces, keywords: ['format', 'validate', 'tree', 'api'] },
   { id: 'diff', label: 'Diff', description: 'Compare two texts', category: 'data', icon: GitCompare, keywords: ['compare', 'changes'] },
+  { id: 'csv', label: 'CSV', description: 'CSV ↔ JSON ↔ Markdown', category: 'data', icon: Table2, keywords: ['tsv', 'table', 'spreadsheet', 'markdown'] },
+  { id: 'typegen', label: 'TypeGen', description: 'JSON → TypeScript & Zod', category: 'data', icon: FileCode2, keywords: ['typescript', 'interface', 'zod', 'types'] },
+  { id: 'curl', label: 'cURL', description: 'cURL → fetch, Axios, RN', category: 'data', icon: Terminal, keywords: ['http', 'axios', 'fetch', 'python', 'undici'] },
+  { id: 'mocker', label: 'Mocker', description: 'Types, mocks & MSW handlers', category: 'data', icon: Boxes, keywords: ['msw', 'factory', 'mock', 'zod', 'api'] },
   { id: 'image', label: 'Image', description: 'Inspect, compress & convert', category: 'media', icon: ImageIcon, keywords: ['png', 'jpg', 'webp', 'compress', 'resize'] },
   { id: 'svg', label: 'SVG', description: 'Preview, minify & export', category: 'media', icon: PenTool, keywords: ['vector', 'icon', 'jsx', 'react-native'] },
   { id: 'blurhash', label: 'BlurHash', description: 'Generate image hashes', category: 'mobile', icon: Hash, keywords: ['thumbhash', 'placeholder', 'react-native', 'expo-image'] },
@@ -56,6 +72,8 @@ export const TOOLS: ToolDef[] = [
   { id: 'timestamp', label: 'Timestamp', description: 'Unix ↔ ISO dates', category: 'time', icon: Clock, keywords: ['unix', 'date', 'epoch'] },
   { id: 'color', label: 'Color', description: 'Hex, RGB & HSL', category: 'design', icon: Palette, keywords: ['hex', 'rgb', 'hsl', 'picker'] },
   { id: 'regex', label: 'Regex', description: 'Test patterns live', category: 'debug', icon: Regex, keywords: ['pattern', 'match'] },
+  { id: 'log', label: 'Logs', description: 'Format & filter log dumps', category: 'debug', icon: ScrollText, keywords: ['logger', 'error', 'stack', 'json'] },
+  { id: 'stack', label: 'Stack Trace', description: 'Clean JS/RN stack traces', category: 'debug', icon: Bug, keywords: ['error', 'sourcemap', 'node_modules', 'crash'] },
 ];
 
 export const TOOL_CATEGORIES: { id: ToolDef['category']; label: string }[] = [
