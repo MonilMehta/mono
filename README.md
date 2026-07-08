@@ -1,6 +1,6 @@
 # mono
 
-A fast, keyboard-first collection of daily developer utilities — built for engineers who work with large JSON payloads, Expo/React Native apps, and web APIs every day. Everything runs client-side in the browser; nothing you paste ever leaves your machine.
+Fast, keyboard-first utilities for JSON, APIs, images, and Expo — everything runs client-side in the browser. Nothing you paste ever leaves your machine.
 
 ## Features
 
@@ -77,11 +77,12 @@ yarn lint    # lint the project
 ```
 app/
   layout.tsx            Root layout, fonts, metadata
-  page.tsx              Entry point — renders the toolbox
+  page.tsx              Entry point — renders mono
   globals.css           Theme tokens (light/dark) & Tailwind setup
 
 components/
-  dev-toolbox.tsx        App shell: sidebar, header, shortcuts, tool switching
+  mono-logo.tsx          Brand mark (three columns)
+  app-shell.tsx        App shell: sidebar, header, shortcuts, tool switching
   command-palette.tsx    ⌘K search palette
   theme-provider.tsx     Light/dark theme context
   tool-card.tsx           Shared card/textarea/toolbar primitives for tools
@@ -108,7 +109,7 @@ lib/
 
 1. Create `components/tools/my-tool.tsx` — a self-contained `'use client'` component. Reuse `ToolCard`, `ToolTextarea`, `ToolBar`, and `CopyButton` from `components/tool-card.tsx` / `components/copy-button.tsx` for a consistent look.
 2. Register it in `lib/tools-registry.ts`: add a `ToolId`, an entry in `TOOLS` (label, description, category, icon, optional search keywords).
-3. Wire it up in `components/dev-toolbox.tsx`: import the component and add it to `TOOL_COMPONENTS`.
+3. Wire it up in `components/app-shell.tsx`: import the component and add it to `TOOL_COMPONENTS`.
 
 That's it — the sidebar, command palette, and keyboard shortcuts pick it up automatically.
 

@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertCircle } from 'lucide-react';
-import { ToolCard, ToolTextarea, ToolBar } from '@/components/tool-card';
+import { AlertCircle, KeyRound } from 'lucide-react';
+import { ToolCard, ToolTextarea, ToolBar, EmptyState } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
 import JsonViewer from '@/components/json-viewer';
 
@@ -106,8 +106,12 @@ export default function JwtTool() {
             </ToolCard>
           </>
         ) : (
-          <ToolCard className="p-5 flex items-center justify-center min-h-[500px]">
-            <p className="text-sm text-muted-foreground">Decoded header & payload appear here</p>
+          <ToolCard className="min-h-[500px]">
+            <EmptyState
+              icon={KeyRound}
+              title="Waiting for a token"
+              description="Paste a JWT on the left to decode its header and payload."
+            />
           </ToolCard>
         )}
       </div>

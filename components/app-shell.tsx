@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Moon, Sun, Menu, X, Search, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
 import { ThemeProvider, useTheme } from '@/components/theme-provider';
 import { CommandPalette } from '@/components/command-palette';
+import { MonoLogo } from '@/components/mono-logo';
 import { TOOLS, TOOL_CATEGORIES, type ToolId } from '@/lib/tools-registry';
 import JsonTool from '@/components/tools/json-tool';
 import JwtTool from '@/components/tools/jwt-tool';
@@ -56,7 +57,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 }
 
-function DevToolboxInner() {
+function AppShellInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const activeTool = (searchParams.get('tool') as ToolId) || 'json';
@@ -125,28 +126,27 @@ function DevToolboxInner() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-40 h-dvh sidebar-rail border-r border-sidebar-border/80 flex flex-col transition-[width,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          sidebarOpen ? 'translate-x-0 w-[248px]' : '-translate-x-full lg:translate-x-0'
-        } ${!sidebarOpen ? (railCollapsed ? 'lg:w-[68px]' : 'lg:w-[248px]') : ''}`}
+        className={`fixed lg:sticky top-0 left-0 z-40 h-dvh sidebar-rail border-r border-sidebar-border/70 flex flex-col transition-[width,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          sidebarOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full lg:translate-x-0'
+        } ${!sidebarOpen ? (railCollapsed ? 'lg:w-[72px]' : 'lg:w-[260px]') : ''}`}
       >
         {/* Brand */}
         <div
-          className={`h-14 shrink-0 flex items-center border-b border-sidebar-border/70 ${
+          className={`h-[60px] shrink-0 flex items-center ${
             railCollapsed ? 'justify-center px-2' : 'px-4 gap-3'
           }`}
         >
-          <div className="w-8 h-8 flex items-center justify-center shrink-0">
-            <img src="/logo.png" alt="Mono" className="w-7 h-7 object-contain" />
+          <div className="w-9 h-9 flex items-center justify-center shrink-0 rounded-xl bg-primary text-primary-foreground shadow-sm shadow-primary/25">
+            <MonoLogo className="w-[18px] h-[18px]" />
           </div>
           {!railCollapsed && (
-            <div className="min-w-0 flex-1 flex items-baseline gap-2 overflow-hidden">
+            <div className="min-w-0 flex-1 overflow-hidden">
               <h1
-                className="text-xl font-bold tracking-tight text-sidebar-foreground leading-none"
+                className="text-[23px] font-bold tracking-tight text-sidebar-foreground leading-none"
                 style={{ fontFamily: 'var(--font-playfair), serif', fontStyle: 'italic' }}
               >
                 mono
               </h1>
-              <span className="text-[10px] font-medium text-muted-foreground tracking-wide">toolbox</span>
             </div>
           )}
           <button
@@ -159,33 +159,44 @@ function DevToolboxInner() {
 
         {/* Quick search */}
         {!railCollapsed && (
-          <div className="px-3 pt-3 pb-1">
+          <div className="px-3 pb-2">
             <button
               onClick={() => setPaletteOpen(true)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border border-sidebar-border/70 bg-background/40 text-muted-foreground hover:text-foreground hover:border-primary/30 transition-colors text-left"
+              className="w-full flex items-center gap-2.5 px-3 h-9 rounded-xl border border-sidebar-border/80 bg-background/55 text-muted-foreground hover:text-foreground hover:border-primary/35 hover:bg-background/80 transition-all text-left shadow-sm"
             >
               <Search size={13} className="shrink-0 opacity-70" />
-              <span className="text-xs flex-1">Search tools…</span>
-              <kbd className="text-[10px] px-1.5 py-0.5 rounded-md bg-secondary/80 ring-1 ring-border/50 font-mono">⌘K</kbd>
+              <span className="text-[12px] flex-1">Search…</span>
+              <kbd className="text-[10px] px-1.5 py-0.5 rounded-md bg-secondary/90 ring-1 ring-border/50 font-mono">⌘K</kbd>
+            </button>
+          </div>
+        )}
+
+        {railCollapsed && (
+          <div className="px-2 pb-2">
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="w-full h-9 flex items-center justify-center rounded-xl border border-sidebar-border/80 bg-background/55 text-muted-foreground hover:text-foreground hover:border-primary/35 transition-colors"
+              title="Search (⌘K)"
+            >
+              <Search size={14} />
             </button>
           </div>
         )}
 
         {/* Nav */}
-        <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-3 ${railCollapsed ? 'px-2' : 'px-2.5'}`}>
-          {TOOL_CATEGORIES.map((cat) => {
+        <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 ${railCollapsed ? 'px-2' : 'px-2.5'}`}>
+          {TOOL_CATEGORIES.map((cat, catIdx) => {
             const tools = TOOLS.filter((t) => t.category === cat.id);
             if (!tools.length) return null;
 
             return (
-              <div key={cat.id} className="mb-4 last:mb-0">
-                {!railCollapsed && (
-                  <p className="text-[10px] font-semibold text-muted-foreground/80 uppercase tracking-[0.14em] px-2.5 mb-1.5">
+              <div key={cat.id} className={`${catIdx > 0 ? 'mt-4' : ''}`}>
+                {!railCollapsed ? (
+                  <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.16em] px-2.5 mb-1.5">
                     {cat.label}
                   </p>
-                )}
-                {railCollapsed && (
-                  <div className="mx-auto mb-1.5 h-px w-5 bg-sidebar-border/80 first:hidden" />
+                ) : (
+                  catIdx > 0 && <div className="mx-auto mb-2 h-px w-6 bg-sidebar-border/70" />
                 )}
                 <div className="space-y-0.5">
                   {tools.map((tool) => {
@@ -196,26 +207,30 @@ function DevToolboxInner() {
                         key={tool.id}
                         onClick={() => setTool(tool.id)}
                         title={tool.label}
-                        className={`group relative w-full flex items-center rounded-xl text-left transition-colors ${
-                          railCollapsed ? 'justify-center h-10' : 'gap-2.5 px-2.5 h-9'
+                        className={`group relative w-full flex items-center rounded-xl text-left transition-all duration-150 ${
+                          railCollapsed ? 'justify-center h-10' : 'gap-2.5 px-2 h-9'
                         } ${
                           isActive
-                            ? 'bg-sidebar-accent text-sidebar-foreground'
-                            : 'text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground'
+                            ? 'bg-primary/12 text-sidebar-foreground shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_22%,transparent)]'
+                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/80 hover:text-sidebar-foreground'
                         }`}
                       >
                         {isActive && (
                           <motion.span
                             layoutId="active-rail"
-                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full bg-primary"
+                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[18px] rounded-full bg-primary"
                             transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                           />
                         )}
-                        <Icon
-                          size={16}
-                          strokeWidth={isActive ? 2.25 : 1.75}
-                          className={`shrink-0 ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}
-                        />
+                        <span
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                            isActive
+                              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                              : 'bg-transparent text-muted-foreground group-hover:bg-background/60 group-hover:text-foreground'
+                          }`}
+                        >
+                          <Icon size={14} strokeWidth={isActive ? 2.25 : 1.85} />
+                        </span>
                         {!railCollapsed && (
                           <span className={`text-[13px] truncate ${isActive ? 'font-semibold' : 'font-medium'}`}>
                             {tool.label}
@@ -231,7 +246,7 @@ function DevToolboxInner() {
         </nav>
 
         {/* Footer */}
-        <div className={`shrink-0 border-t border-sidebar-border/70 p-2 ${railCollapsed ? '' : 'px-2.5'}`}>
+        <div className={`shrink-0 border-t border-sidebar-border/60 p-2.5 ${railCollapsed ? '' : ''}`}>
           <div className={`flex ${railCollapsed ? 'flex-col items-center gap-1' : 'items-center gap-1'}`}>
             <button
               onClick={toggleTheme}
@@ -247,7 +262,9 @@ function DevToolboxInner() {
               }`}
               title={railCollapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)'}
             >
-              {railCollapsed ? <PanelLeftOpen size={15} /> : (
+              {railCollapsed ? (
+                <PanelLeftOpen size={15} />
+              ) : (
                 <>
                   <PanelLeftClose size={15} />
                   <span className="text-xs font-medium">Collapse</span>
@@ -273,7 +290,7 @@ function DevToolboxInner() {
 
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col min-h-dvh">
-        <header className="sticky top-0 z-20 h-14 border-b border-border/60 bg-background/75 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between gap-4">
+        <header className="sticky top-0 z-20 h-[60px] border-b border-border/50 bg-background/70 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -282,20 +299,20 @@ function DevToolboxInner() {
               <Menu size={18} />
             </button>
 
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="hidden sm:flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
-                <CurrentIcon size={15} strokeWidth={2} />
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15 shrink-0">
+                <CurrentIcon size={16} strokeWidth={2} />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-[15px] font-semibold tracking-tight truncate leading-none">{current.label}</h2>
                   {categoryLabel && (
-                    <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground bg-secondary/80 px-1.5 py-0.5 rounded-md">
+                    <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80 bg-secondary/70 px-1.5 py-0.5 rounded-md">
                       {categoryLabel}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5 hidden sm:block">{current.description}</p>
+                <p className="text-xs text-muted-foreground truncate mt-1 hidden sm:block">{current.description}</p>
               </div>
             </div>
           </div>
@@ -303,7 +320,7 @@ function DevToolboxInner() {
           <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => setPaletteOpen(true)}
-              className="surface-muted flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+              className="surface-muted flex items-center gap-2 px-3 h-9 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               <Search size={13} />
               <span className="hidden md:inline">Search</span>
@@ -311,7 +328,7 @@ function DevToolboxInner() {
             </button>
             <button
               onClick={toggleTheme}
-              className="lg:hidden p-2 rounded-xl surface-muted text-muted-foreground hover:text-foreground"
+              className="lg:hidden h-9 w-9 flex items-center justify-center rounded-xl surface-muted text-muted-foreground hover:text-foreground"
               title="Toggle theme"
             >
               {isDark ? <Sun size={15} /> : <Moon size={15} />}
@@ -319,7 +336,7 @@ function DevToolboxInner() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-6 w-full max-w-[1200px]">
+        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 w-full max-w-[1180px]">
           <AnimatePresence mode="wait">
             <motion.div
               key={current.id}
@@ -337,11 +354,11 @@ function DevToolboxInner() {
   );
 }
 
-export function DevToolbox() {
+export function AppShell() {
   return (
     <ThemeProvider>
       <Suspense fallback={<div className="min-h-screen bg-background" />}>
-        <DevToolboxInner />
+        <AppShellInner />
       </Suspense>
     </ThemeProvider>
   );

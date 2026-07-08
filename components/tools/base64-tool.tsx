@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ToolCard, ToolTextarea, ToolBar } from '@/components/tool-card';
+import { Binary } from 'lucide-react';
+import { ToolCard, ToolTextarea, ToolBar, EmptyState, ToolChip } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
 
 type Mode = 'encode' | 'decode';
@@ -32,17 +33,11 @@ export default function Base64Tool() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <ToolCard minHeight="min-h-[400px]">
-        <div className="flex gap-2 p-4 pb-0">
+        <div className="flex gap-1.5 px-4 pt-4 pb-0">
           {(['decode', 'encode'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize ${
-                mode === m ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
-              }`}
-            >
+            <ToolChip key={m} active={mode === m} onClick={() => setMode(m)} className="capitalize">
               {m}
-            </button>
+            </ToolChip>
           ))}
           <label className="flex items-center gap-2 ml-auto text-xs text-muted-foreground cursor-pointer">
             <input type="checkbox" checked={urlSafe} onChange={(e) => setUrlSafe(e.target.checked)} className="rounded" />
@@ -62,13 +57,21 @@ export default function Base64Tool() {
       </ToolCard>
 
       <ToolCard minHeight="min-h-[400px]">
-        <div className="p-4 pb-0 flex justify-between items-center">
-          <span className="text-xs font-medium text-muted-foreground">Output</span>
+        <div className="px-5 pt-4 pb-0 flex justify-between items-center">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Output</span>
           {output && <CopyButton text={output} size={14} />}
         </div>
-        <pre className="flex-1 p-6 text-sm font-mono whitespace-pre-wrap break-all overflow-auto text-foreground/80">
-          {output || <span className="text-muted-foreground">Result appears here</span>}
-        </pre>
+        {output ? (
+          <pre className="flex-1 px-5 py-4 text-sm font-mono whitespace-pre-wrap break-all overflow-auto text-foreground/85 leading-7">
+            {output}
+          </pre>
+        ) : (
+          <EmptyState
+            icon={Binary}
+            title="No output yet"
+            description={mode === 'decode' ? 'Paste Base64 on the left to decode it.' : 'Type text on the left to encode it.'}
+          />
+        )}
       </ToolCard>
     </div>
   );

@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ToolCard, ToolTextarea, ToolBar } from '@/components/tool-card';
+import { FileCode2 } from 'lucide-react';
+import { ToolCard, ToolTextarea, ToolBar, EmptyState, ToolChip } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
 import { jsonToTypeScript, jsonToZod } from '@/lib/json-to-ts';
 
@@ -39,24 +40,18 @@ export default function TypegenTool() {
   return (
     <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-1 bg-secondary/40 p-1 rounded-2xl border border-border/30">
+        <div className="flex gap-1 bg-secondary/50 p-1 rounded-xl border border-border/40">
           {(['typescript', 'zod'] as const).map((k) => (
-            <button
-              key={k}
-              onClick={() => setKind(k)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold capitalize ${
-                kind === k ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
+            <ToolChip key={k} active={kind === k} onClick={() => setKind(k)}>
               {k === 'typescript' ? 'TypeScript' : 'Zod'}
-            </button>
+            </ToolChip>
           ))}
         </div>
         <input
           value={rootName}
           onChange={(e) => setRootName(e.target.value)}
           placeholder="Root name"
-          className="px-3 py-2 rounded-xl bg-secondary/50 text-sm font-mono border border-border/40 focus:outline-none w-36"
+          className="px-3 h-8 rounded-lg bg-secondary/50 text-sm font-mono border border-border/40 focus:outline-none w-36"
         />
         {kind === 'typescript' && (
           <>
@@ -94,13 +89,19 @@ export default function TypegenTool() {
         </ToolCard>
 
         <ToolCard minHeight="min-h-80">
-          <pre className="flex-1 p-7 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
-            {result.error ? (
-              <span className="text-destructive">{result.error}</span>
-            ) : (
-              result.text || <span className="text-muted-foreground/50">Types appear here…</span>
-            )}
-          </pre>
+          {result.error ? (
+            <div className="flex-1 p-5 text-sm text-destructive font-mono">{result.error}</div>
+          ) : result.text ? (
+            <pre className="flex-1 p-5 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
+              {result.text}
+            </pre>
+          ) : (
+            <EmptyState
+              icon={FileCode2}
+              title="Types will show up here"
+              description="Paste JSON on the left to generate TypeScript or Zod."
+            />
+          )}
           <ToolBar>
             <span className="text-xs text-muted-foreground">{kind === 'zod' ? 'Zod schema' : 'TS types'}</span>
             {result.text && <CopyButton text={result.text} size={14} />}

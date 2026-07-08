@@ -1,5 +1,5 @@
-import { DevToolbox } from '@/components/dev-toolbox';
+import { AppShell } from '@/components/app-shell';
 
 export default function Home() {
-  return <DevToolbox />;
+  return <AppShell />;
 }

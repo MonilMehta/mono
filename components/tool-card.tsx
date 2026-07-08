@@ -1,5 +1,7 @@
 'use client';
 
+import type { LucideIcon } from 'lucide-react';
+
 interface ToolCardProps {
   children: React.ReactNode;
   className?: string;
@@ -30,7 +32,7 @@ export function ToolTextarea({ value, onChange, placeholder, className = '', mon
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`flex-1 bg-transparent px-5 py-5 text-[13.5px] resize-none focus:outline-none placeholder-muted-foreground/45 leading-7 selection:bg-primary/20 ${mono ? 'font-mono' : 'font-sans'} ${className}`}
+      className={`flex-1 bg-transparent px-5 py-5 text-[13.5px] resize-none focus:outline-none placeholder-muted-foreground/40 leading-7 selection:bg-primary/20 ${mono ? 'font-mono' : 'font-sans'} ${className}`}
     />
   );
 }
@@ -41,7 +43,7 @@ interface ToolBarProps {
 
 export function ToolBar({ children }: ToolBarProps) {
   return (
-    <div className="border-t border-border/50 bg-secondary/35 px-5 py-3 flex items-center justify-between gap-4">
+    <div className="border-t border-border/45 bg-secondary/30 px-5 py-3 flex items-center justify-between gap-4">
       {children}
     </div>
   );
@@ -92,5 +94,28 @@ export function ToolChip({ active, onClick, children, className = '' }: ToolChip
     >
       {children}
     </button>
+  );
+}
+
+interface EmptyStateProps {
+  icon?: LucideIcon;
+  title: string;
+  description?: string;
+  className?: string;
+}
+
+export function EmptyState({ icon: Icon, title, description, className = '' }: EmptyStateProps) {
+  return (
+    <div className={`empty-canvas flex-1 flex flex-col items-center justify-center text-center px-8 py-12 ${className}`}>
+      {Icon && (
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-border/60 bg-card/80 text-primary shadow-sm">
+          <Icon size={20} strokeWidth={1.75} />
+        </div>
+      )}
+      <p className="text-sm font-semibold text-foreground/90 tracking-tight">{title}</p>
+      {description && (
+        <p className="mt-1.5 text-xs text-muted-foreground max-w-[240px] leading-5">{description}</p>
+      )}
+    </div>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ToolCard, ToolTextarea, ToolBar } from '@/components/tool-card';
+import { Table2 } from 'lucide-react';
+import { ToolCard, ToolTextarea, ToolBar, EmptyState, ToolChip } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
 import {
   csvToJson,
@@ -47,23 +48,15 @@ export default function CsvTool() {
             ['json-to-md', 'JSON → Markdown'],
           ] as const
         ).map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => setMode(id)}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              mode === id
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary/50 text-muted-foreground hover:text-foreground'
-            }`}
-          >
+          <ToolChip key={id} active={mode === id} onClick={() => setMode(id)}>
             {label}
-          </button>
+          </ToolChip>
         ))}
         {mode !== 'json-to-md' && (
           <select
             value={delimiter}
             onChange={(e) => setDelimiter(e.target.value as Delimiter | 'auto')}
-            className="ml-auto px-3 py-2 rounded-xl bg-secondary/50 text-sm border border-border/40 focus:outline-none"
+            className="ml-auto px-3 h-8 rounded-lg bg-secondary/60 text-xs border border-border/40 focus:outline-none"
           >
             <option value="auto">Delimiter: auto</option>
             <option value=",">Comma (,)</option>
@@ -100,13 +93,19 @@ export default function CsvTool() {
         </ToolCard>
 
         <ToolCard minHeight="min-h-80">
-          <pre className="flex-1 p-7 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
-            {result.error ? (
-              <span className="text-destructive">{result.error}</span>
-            ) : (
-              result.text || <span className="text-muted-foreground/50">Output appears here…</span>
-            )}
-          </pre>
+          {result.error ? (
+            <div className="flex-1 p-5 text-sm text-destructive font-mono">{result.error}</div>
+          ) : result.text ? (
+            <pre className="flex-1 p-5 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
+              {result.text}
+            </pre>
+          ) : (
+            <EmptyState
+              icon={Table2}
+              title="Output ready when you are"
+              description="Paste data on the left to convert between CSV, JSON, and Markdown."
+            />
+          )}
           <ToolBar>
             <span className="text-xs text-muted-foreground">
               {result.ok && result.text

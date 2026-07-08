@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ToolCard, ToolTextarea, ToolBar } from '@/components/tool-card';
+import { Boxes } from 'lucide-react';
+import { ToolCard, ToolTextarea, ToolBar, EmptyState, ToolChip } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
 import { jsonToTypeScript, jsonToZod, sampleMock } from '@/lib/json-to-ts';
 
@@ -53,7 +54,7 @@ export default function MockerTool() {
   return (
     <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-1 bg-secondary/40 p-1.5 rounded-2xl border border-border/30">
+        <div className="flex flex-wrap gap-1.5">
           {(
             [
               ['types', 'Types'],
@@ -63,21 +64,15 @@ export default function MockerTool() {
               ['msw', 'MSW'],
             ] as const
           ).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={`px-3 py-2 rounded-xl text-xs font-semibold ${
-                tab === id ? 'bg-background shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
+            <ToolChip key={id} active={tab === id} onClick={() => setTab(id)}>
               {label}
-            </button>
+            </ToolChip>
           ))}
         </div>
         <input
           value={rootName}
           onChange={(e) => setRootName(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-secondary/50 text-sm font-mono border border-border/40 focus:outline-none w-36"
+          className="px-3 h-8 rounded-lg bg-secondary/50 text-sm font-mono border border-border/40 focus:outline-none w-36"
           placeholder="Root name"
         />
       </div>
@@ -100,13 +95,19 @@ export default function MockerTool() {
         </ToolCard>
 
         <ToolCard minHeight="min-h-80">
-          <pre className="flex-1 p-7 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
-            {result.error ? (
-              <span className="text-destructive">{result.error}</span>
-            ) : (
-              result.text || <span className="text-muted-foreground/50">Generated output…</span>
-            )}
-          </pre>
+          {result.error ? (
+            <div className="flex-1 p-5 text-sm text-destructive font-mono">{result.error}</div>
+          ) : result.text ? (
+            <pre className="flex-1 p-5 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
+              {result.text}
+            </pre>
+          ) : (
+            <EmptyState
+              icon={Boxes}
+              title="Mocks & handlers"
+              description="Paste an API response to generate types, Zod, factories, and MSW."
+            />
+          )}
           <ToolBar>
             <span className="text-xs text-muted-foreground">Ready to paste into your project</span>
             {result.text && <CopyButton text={result.text} size={14} />}

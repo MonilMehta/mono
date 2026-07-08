@@ -15,25 +15,16 @@ const playfair = Playfair_Display({
 })
 
 export const metadata: Metadata = {
-  title: 'mono — Developer Toolbox',
-  description: 'Daily developer utilities for Expo and web: JSON inspector, JWT decoder, Base64, URL parser, timestamps, UUIDs, colors, diff, regex, and Expo deep links.',
-  generator: 'v0.app',
+  title: 'mono',
+  description: 'JSON, JWT, Base64, URL, timestamps, UUIDs, colors, diff, regex, images, and more — all client-side.',
   icons: {
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon-light.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: light)' },
+      { url: '/icon-dark.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: dark)' },
     ],
-    apple: '/apple-icon.png',
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
 }
 

@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ToolCard, ToolTextarea, ToolBar } from '@/components/tool-card';
+import { Link } from 'lucide-react';
+import { ToolCard, ToolTextarea, ToolBar, EmptyState, ToolChip } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
 
 type Mode = 'encode' | 'decode' | 'parse';
@@ -35,17 +36,11 @@ export default function UrlTool() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <ToolCard minHeight="min-h-[400px]">
-        <div className="flex gap-2 p-4 pb-0 flex-wrap">
+        <div className="flex gap-1.5 px-4 pt-4 pb-0 flex-wrap">
           {(['decode', 'encode', 'parse'] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => setMode(m)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize ${
-                mode === m ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
-              }`}
-            >
+            <ToolChip key={m} active={mode === m} onClick={() => setMode(m)} className="capitalize">
               {m}
-            </button>
+            </ToolChip>
           ))}
         </div>
         <ToolTextarea
@@ -65,14 +60,14 @@ export default function UrlTool() {
       </ToolCard>
 
       <ToolCard minHeight="min-h-[400px]">
-        <div className="p-4 pb-0 flex justify-between items-center">
-          <span className="text-xs font-medium text-muted-foreground">
+        <div className="px-5 pt-4 pb-0 flex justify-between items-center">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {mode === 'parse' ? 'Parsed URL' : 'Output'}
           </span>
           {output && <CopyButton text={output} size={14} />}
         </div>
         {parsed ? (
-          <div className="p-6 space-y-4 overflow-auto flex-1">
+          <div className="p-5 space-y-4 overflow-auto flex-1">
             <Field label="Origin" value={parsed.origin} />
             <Field label="Path" value={parsed.pathname} />
             <div>
@@ -81,7 +76,7 @@ export default function UrlTool() {
                 <p className="text-xs text-muted-foreground">None</p>
               ) : (
                 Object.entries(parsed.params).map(([k, v]) => (
-                  <div key={k} className="flex gap-2 text-xs font-mono py-1 border-b border-border/30">
+                  <div key={k} className="flex gap-2 text-xs font-mono py-1.5 border-b border-border/30">
                     <span className="text-primary font-medium">{k}</span>
                     <span className="text-muted-foreground">=</span>
                     <span>{v}</span>
@@ -90,10 +85,22 @@ export default function UrlTool() {
               )}
             </div>
           </div>
-        ) : (
-          <pre className="flex-1 p-6 text-sm font-mono whitespace-pre-wrap break-all overflow-auto text-foreground/80">
-            {output || <span className="text-muted-foreground">Result appears here</span>}
+        ) : output ? (
+          <pre className="flex-1 px-5 py-4 text-sm font-mono whitespace-pre-wrap break-all overflow-auto text-foreground/85 leading-7">
+            {output}
           </pre>
+        ) : (
+          <EmptyState
+            icon={Link}
+            title="No result yet"
+            description={
+              mode === 'parse'
+                ? 'Paste a full URL to break it into origin, path, and params.'
+                : mode === 'decode'
+                  ? 'Paste an encoded string to decode it.'
+                  : 'Type text to URL-encode it.'
+            }
+          />
         )}
       </ToolCard>
     </div>

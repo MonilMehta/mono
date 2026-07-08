@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ToolCard, ToolTextarea, ToolBar } from '@/components/tool-card';
+import { Terminal } from 'lucide-react';
+import { ToolCard, ToolTextarea, ToolBar, EmptyState, ToolChip } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
 import {
   parseCurl,
@@ -63,19 +64,11 @@ export default function CurlTool() {
 
   return (
     <div className="w-full space-y-4">
-      <div className="flex flex-wrap gap-1 bg-secondary/40 p-1.5 rounded-2xl border border-border/30 w-fit">
+      <div className="flex flex-wrap gap-1.5">
         {TARGETS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTarget(t.id)}
-            className={`px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-              target === t.id
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
+          <ToolChip key={t.id} active={target === t.id} onClick={() => setTarget(t.id)}>
             {t.label}
-          </button>
+          </ToolChip>
         ))}
       </div>
 
@@ -97,13 +90,19 @@ export default function CurlTool() {
         </ToolCard>
 
         <ToolCard minHeight="min-h-80">
-          <pre className="flex-1 p-7 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
-            {result.error ? (
-              <span className="text-destructive">{result.error}</span>
-            ) : (
-              result.text || <span className="text-muted-foreground/50">Generated code appears here…</span>
-            )}
-          </pre>
+          {result.error ? (
+            <div className="flex-1 p-5 text-sm text-destructive font-mono">{result.error}</div>
+          ) : result.text ? (
+            <pre className="flex-1 p-5 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
+              {result.text}
+            </pre>
+          ) : (
+            <EmptyState
+              icon={Terminal}
+              title="Code will land here"
+              description="Paste a curl command to generate fetch, Axios, Python, and more."
+            />
+          )}
           <ToolBar>
             <span className="text-xs text-muted-foreground">{TARGETS.find((t) => t.id === target)?.label}</span>
             {result.text && <CopyButton text={result.text} size={14} />}
