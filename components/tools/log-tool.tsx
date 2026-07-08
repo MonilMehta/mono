@@ -28,7 +28,7 @@ export default function LogTool() {
   const groups = useMemo(() => groupErrors(entries), [entries]);
 
   return (
-    <div className="max-w-5xl space-y-4">
+    <div className="w-full space-y-4">
       <ToolCard minHeight="min-h-48">
         <ToolTextarea
           value={input}

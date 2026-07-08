@@ -106,7 +106,7 @@ export default function JwtTool() {
             </ToolCard>
           </>
         ) : (
-          <ToolCard className="p-8 flex items-center justify-center min-h-[500px]">
+          <ToolCard className="p-5 flex items-center justify-center min-h-[500px]">
             <p className="text-sm text-muted-foreground">Decoded header & payload appear here</p>
           </ToolCard>
         )}

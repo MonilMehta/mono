@@ -23,7 +23,7 @@ export default function StackTool() {
     : [];
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="w-full space-y-4">
       <ToolCard minHeight="min-h-48">
         <ToolTextarea
           value={input}

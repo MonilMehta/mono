@@ -150,7 +150,7 @@ export default function SvgTool() {
   };
 
   return (
-    <div className="w-full h-full max-w-5xl mx-auto">
+    <div className="w-full">
       <AnimatePresence mode="wait">
         {!showOutput ? (
           <motion.div 
@@ -162,7 +162,7 @@ export default function SvgTool() {
             className="flex flex-col"
           >
             <div
-              className={`surface-panel relative rounded-3xl overflow-hidden flex flex-col h-full min-h-96 lg:min-h-[640px] transition-colors duration-200 ${
+              className={`surface-panel relative rounded-2xl overflow-hidden flex flex-col h-full min-h-80 lg:min-h-[560px] transition-colors duration-200 ${
                 isDragging ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
               }`}
               onDragOver={(e) => {
@@ -210,14 +210,14 @@ export default function SvgTool() {
                 }}
               />
 
-              <div className="flex items-center justify-between gap-4 border-b border-border/50 bg-card px-8 py-5">
+              <div className="flex items-center justify-between gap-4 border-b border-border/50 bg-card px-5 py-3.5">
                 <div>
-                  <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">SVG input</h3>
+                  <h3 className="text-sm font-semibold tracking-tight text-foreground">SVG input</h3>
                   <p className="mt-1 text-sm text-muted-foreground">Paste SVG code or drop a .svg file to preview and convert it.</p>
                 </div>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="hidden sm:inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-secondary/80 active:scale-95"
+                  className="hidden sm:inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-secondary/80 active:scale-95"
                 >
                   <Upload size={16} />
                   Upload
@@ -229,10 +229,10 @@ export default function SvgTool() {
                 value={input}
                 onChange={(e) => handleInputChange(e.target.value)}
                 placeholder={`Paste SVG code or drop a .svg file...\n\n<svg viewBox="0 0 24 24" fill="none">\n  <path d="M12 2L2 22h20L12 2z" />\n</svg>`}
-                className="flex-1 bg-background/35 p-8 font-mono text-base resize-none focus:outline-none placeholder-muted-foreground/55 leading-8"
+                className="flex-1 bg-background/35 p-5 font-mono text-[13.5px] resize-none focus:outline-none placeholder-muted-foreground/55 leading-7"
               />
 
-              <div className="border-t border-border/50 bg-card px-8 py-5 flex items-center justify-between gap-5">
+              <div className="border-t border-border/50 bg-card px-5 py-3.5 flex items-center justify-between gap-5">
                 <div className="flex items-center gap-2 min-w-0">
                   {input && !isValidSvg && <AlertCircle size={16} className="text-destructive shrink-0" />}
                   <span
@@ -273,7 +273,7 @@ export default function SvgTool() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.3 }}
-            className="flex flex-col h-full min-h-96 lg:min-h-[640px] gap-6"
+            className="flex flex-col h-full min-h-80 lg:min-h-[560px] gap-6"
           >
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
               <div className="flex items-center gap-1 bg-secondary/40 p-1.5 rounded-2xl w-fit overflow-x-auto no-scrollbar shrink-0 border border-border/30">
@@ -326,7 +326,7 @@ export default function SvgTool() {
               </div>
             </div>
 
-            <div className="flex-1 surface-panel rounded-3xl overflow-hidden flex flex-col xl:flex-row transition-colors duration-200">
+            <div className="flex-1 surface-panel rounded-2xl overflow-hidden flex flex-col xl:flex-row transition-colors duration-200">
               {/* Left Side: SVG Source Editor */}
               <div className="w-full xl:w-1/2 flex flex-col border-b xl:border-b-0 xl:border-r border-border/50">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-card">
@@ -346,7 +346,7 @@ export default function SvgTool() {
               {/* Right Side: Preview and Output */}
               <div className="w-full xl:w-1/2 flex flex-col bg-card/50">
                 {/* Preview Panel */}
-                <div className="h-64 border-b border-border/50 relative bg-[repeating-conic-gradient(var(--secondary)_0%_25%,transparent_0%_50%)] bg-size-[16px_16px] flex items-center justify-center p-8 shrink-0">
+                <div className="h-64 border-b border-border/50 relative bg-[repeating-conic-gradient(var(--secondary)_0%_25%,transparent_0%_50%)] bg-size-[16px_16px] flex items-center justify-center p-5 shrink-0">
                   <div className="absolute top-4 left-6">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-background/80 px-2 py-1 rounded-md">Live Preview</span>
                   </div>

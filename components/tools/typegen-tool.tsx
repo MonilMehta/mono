@@ -37,7 +37,7 @@ export default function TypegenTool() {
   }, [input, rootName, useInterface, optionalFields, readonly, kind]);
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-1 bg-secondary/40 p-1 rounded-2xl border border-border/30">
           {(['typescript', 'zod'] as const).map((k) => (

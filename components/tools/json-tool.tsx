@@ -306,7 +306,7 @@ export default function JsonTool() {
     : '';
 
   return (
-    <div className="w-full h-full max-w-5xl mx-auto">
+    <div className="w-full">
       <AnimatePresence mode="wait">
         {!showOutput ? (
           <motion.div 
@@ -318,7 +318,7 @@ export default function JsonTool() {
             className="flex flex-col"
           >
             <div
-              className={`surface-panel relative rounded-3xl overflow-hidden flex flex-col h-full min-h-96 lg:min-h-[640px] transition-colors duration-200 ${
+              className={`surface-panel relative rounded-2xl overflow-hidden flex flex-col h-full min-h-80 lg:min-h-[560px] transition-colors duration-200 ${
                 isDragging ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
               }`}
               onDragOver={(e) => {
@@ -366,14 +366,14 @@ export default function JsonTool() {
                 }}
               />
 
-              <div className="flex items-center justify-between gap-4 border-b border-border/50 bg-card px-8 py-5">
+              <div className="flex items-center justify-between gap-4 border-b border-border/50 bg-card px-5 py-3.5">
                 <div>
-                  <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">JSON input</h3>
+                  <h3 className="text-sm font-semibold tracking-tight text-foreground">JSON input</h3>
                   <p className="mt-1 text-sm text-muted-foreground">Paste a payload, drop a file, or upload JSON to format and inspect it.</p>
                 </div>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="hidden sm:inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-secondary/80 active:scale-95"
+                  className="hidden sm:inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-secondary/80 active:scale-95"
                   title="Upload JSON file"
                 >
                   <Upload size={16} />
@@ -395,10 +395,10 @@ export default function JsonTool() {
                   }, 0);
                 }}
                 placeholder={`Paste JSON or drop a .json file...\n\n{\n  "name": "John",\n  "age": 30\n}`}
-                className="flex-1 bg-background/35 p-8 font-mono text-base resize-none focus:outline-none placeholder-muted-foreground/55 leading-8"
+                className="flex-1 bg-background/35 p-5 font-mono text-[13.5px] resize-none focus:outline-none placeholder-muted-foreground/55 leading-7"
               />
 
-              <div className="border-t border-border/50 bg-card px-8 py-5 flex items-center justify-between gap-5">
+              <div className="border-t border-border/50 bg-card px-5 py-3.5 flex items-center justify-between gap-5">
                 <div className="flex items-center gap-2 min-w-0">
                   {parseError && <AlertCircle size={16} className="text-destructive shrink-0" />}
                   {isValidating && !parseError && (
@@ -495,7 +495,7 @@ export default function JsonTool() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.3 }}
-            className="flex flex-col h-full min-h-96 lg:min-h-[640px] gap-6"
+            className="flex flex-col h-full min-h-80 lg:min-h-[560px] gap-6"
           >
             {!parseError && (
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -633,8 +633,8 @@ export default function JsonTool() {
               </div>
             )}
 
-            <div className="flex-1 surface-panel rounded-3xl overflow-hidden flex flex-col transition-colors duration-200">
-              <div className="flex-1 overflow-auto p-8">
+            <div className="flex-1 surface-panel rounded-2xl overflow-hidden flex flex-col transition-colors duration-200">
+              <div className="flex-1 overflow-auto p-5">
                 {parseError ? (
                   <div className="space-y-3">
                     <div className="text-sm text-destructive font-mono">{errorDisplay}</div>
@@ -658,11 +658,9 @@ export default function JsonTool() {
 
 function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
-    <div
-      className="surface-panel rounded-2xl px-4 py-4 text-center transition-colors duration-200 hover:border-primary/20"
-    >
-      <p className="text-xs text-muted-foreground font-semibold mb-1.5 uppercase tracking-[0.12em]">{label}</p>
-      <p className="text-lg font-semibold text-primary">{value}</p>
+    <div className="surface-panel rounded-xl px-3 py-3 text-center">
+      <p className="text-[10px] text-muted-foreground font-semibold mb-1 uppercase tracking-[0.12em]">{label}</p>
+      <p className="text-sm font-semibold text-primary tabular-nums">{value}</p>
     </div>
   );
 }

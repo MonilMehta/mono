@@ -38,7 +38,7 @@ export default function CsvTool() {
   }, [input, mode, delimiter]);
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         {(
           [

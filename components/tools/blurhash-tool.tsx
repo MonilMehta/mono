@@ -99,7 +99,7 @@ export default function BlurhashTool() {
   };
 
   return (
-    <div className="w-full h-full max-w-5xl mx-auto">
+    <div className="w-full">
       <AnimatePresence mode="wait">
         {!showOutput ? (
           <motion.div 
@@ -108,10 +108,10 @@ export default function BlurhashTool() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.3 }}
-            className="flex flex-col h-full min-h-96 lg:min-h-[640px]"
+            className="flex flex-col h-full min-h-80 lg:min-h-[560px]"
           >
             <div
-              className={`surface-panel relative rounded-3xl overflow-hidden flex flex-col h-full flex-1 transition-colors duration-200 ${
+              className={`surface-panel relative rounded-2xl overflow-hidden flex flex-col h-full flex-1 transition-colors duration-200 ${
                 isDragging ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
               }`}
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -153,21 +153,21 @@ export default function BlurhashTool() {
                 }}
               />
 
-              <div className="flex items-center justify-between gap-4 border-b border-border/50 bg-card px-8 py-5">
+              <div className="flex items-center justify-between gap-4 border-b border-border/50 bg-card px-5 py-3.5">
                 <div>
-                  <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">Image to Hash</h3>
+                  <h3 className="text-sm font-semibold tracking-tight text-foreground">Image to Hash</h3>
                   <p className="mt-1 text-sm text-muted-foreground">Drop an image to generate BlurHash and ThumbHash</p>
                 </div>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="hidden sm:inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-secondary/80 active:scale-95"
+                  className="hidden sm:inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-secondary/80 active:scale-95"
                 >
                   <Upload size={16} />
                   Upload Image
                 </button>
               </div>
 
-              <div className="flex-1 flex flex-col items-center justify-center bg-background/35 p-8 text-center cursor-pointer hover:bg-background/50 transition-colors" onClick={() => fileInputRef.current?.click()}>
+              <div className="flex-1 flex flex-col items-center justify-center bg-background/35 p-5 text-center cursor-pointer hover:bg-background/50 transition-colors" onClick={() => fileInputRef.current?.click()}>
                 <div className="w-16 h-16 rounded-full bg-secondary/80 flex items-center justify-center mb-4 text-muted-foreground">
                   <ImageIcon2 size={28} />
                 </div>
@@ -179,7 +179,7 @@ export default function BlurhashTool() {
           <motion.div
             key="output"
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }}
-            className="flex flex-col h-full min-h-96 lg:min-h-[640px] gap-6"
+            className="flex flex-col h-full min-h-80 lg:min-h-[560px] gap-6"
           >
             {image && (
               <>
@@ -212,7 +212,7 @@ export default function BlurhashTool() {
                   </div>
                 </div>
 
-                <div className="flex-1 surface-panel rounded-3xl overflow-hidden flex flex-col xl:flex-row transition-colors duration-200">
+                <div className="flex-1 surface-panel rounded-2xl overflow-hidden flex flex-col xl:flex-row transition-colors duration-200">
                   <div className="flex-1 flex flex-col border-b xl:border-b-0 xl:border-r border-border/50 min-h-[300px]">
                      <div className="flex-1 relative bg-[repeating-conic-gradient(var(--secondary)_0%_25%,transparent_0%_50%)] bg-size-[20px_20px] flex items-center justify-center p-8">
                         <img 

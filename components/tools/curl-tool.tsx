@@ -62,7 +62,7 @@ export default function CurlTool() {
   }, [input, target]);
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap gap-1 bg-secondary/40 p-1.5 rounded-2xl border border-border/30 w-fit">
         {TARGETS.map((t) => (
           <button

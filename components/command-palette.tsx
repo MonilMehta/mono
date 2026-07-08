@@ -90,104 +90,123 @@ export function CommandPalette({ open, onClose, onSelect, onToggleTheme, isDark 
     return () => window.removeEventListener('keydown', handler);
   }, [open, flatList, activeIndex, onSelect, onClose]);
 
-  if (!open) return null;
-
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
-        className="fixed inset-0 z-100 bg-background/35 backdrop-blur-md flex items-start justify-center pt-[12vh] px-4"
-        onClick={onClose}
-      >
+      {open && (
         <motion.div
-          initial={{ opacity: 0, y: -12, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -8, scale: 0.98 }}
-          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-          onClick={(e) => e.stopPropagation()}
-          className="surface-panel w-full max-w-2xl rounded-3xl overflow-hidden flex flex-col max-h-[74vh]"
-          style={{
-            boxShadow: '0 28px 80px -24px color-mix(in oklch, var(--foreground) 42%, transparent)',
-          }}
+          key="palette"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.12 }}
+          className="fixed inset-0 z-100 bg-background/40 backdrop-blur-md flex items-start justify-center pt-[14vh] px-4"
+          onClick={onClose}
         >
-          <div className="flex items-center gap-4 px-5 py-5 border-b border-border/40 bg-secondary/25">
-            <Search size={20} className="text-muted-foreground shrink-0" />
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search tools..."
-              className="flex-1 bg-transparent text-lg focus:outline-none placeholder:text-muted-foreground/50"
-            />
-            <kbd className="text-xs px-2 py-1 rounded-md bg-background/80 text-muted-foreground ring-1 ring-border/60 shrink-0">esc</kbd>
-          </div>
-
-          <div ref={listRef} className="flex-1 overflow-y-auto p-3">
-            {flatList.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No tools found</p>
-            ) : grouped ? (
-              grouped.map((group) => (
-                <div key={group.cat.id} className="mb-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-[0.16em] px-3 py-2">
-                    {group.cat.label}
-                  </p>
-                  {group.tools.map((r) => {
-                    const idx = flatList.indexOf(r);
-                    return (
-                      <ResultRow
-                        key={r.tool.id}
-                        tool={r.tool}
-                        index={idx}
-                        active={idx === activeIndex}
-                        query={query}
-                        onHover={() => setActiveIndex(idx)}
-                        onSelect={() => { onSelect(r.tool.id); onClose(); }}
-                      />
-                    );
-                  })}
-                </div>
-              ))
-            ) : (
-              flatList.map((r, idx) => (
-                <ResultRow
-                  key={r.tool.id}
-                  tool={r.tool}
-                  index={idx}
-                  active={idx === activeIndex}
-                  query={query}
-                  onHover={() => setActiveIndex(idx)}
-                  onSelect={() => { onSelect(r.tool.id); onClose(); }}
-                />
-              ))
-            )}
-          </div>
-
-          <div className="flex items-center justify-between px-5 py-4 border-t border-border/40 bg-secondary/30">
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><ArrowUp size={12} /><ArrowDown size={12} /> navigate</span>
-              <span className="flex items-center gap-1.5"><CornerDownLeft size={12} /> select</span>
+          <motion.div
+            initial={{ opacity: 0, y: -10, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            onClick={(e) => e.stopPropagation()}
+            className="surface-panel w-full max-w-xl rounded-2xl overflow-hidden flex flex-col max-h-[68vh]"
+          >
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/50">
+              <Search size={16} className="text-muted-foreground shrink-0" />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search tools…"
+                className="flex-1 bg-transparent text-[15px] focus:outline-none placeholder:text-muted-foreground/50"
+              />
+              <kbd className="text-[10px] px-1.5 py-0.5 rounded-md bg-secondary text-muted-foreground ring-1 ring-border/60 shrink-0 font-mono">esc</kbd>
             </div>
-            <button
-              onClick={onToggleTheme}
-              className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {isDark ? <Sun size={13} /> : <Moon size={13} />}
-              {isDark ? 'Light mode' : 'Dark mode'}
-            </button>
-          </div>
+
+            <div ref={listRef} className="flex-1 overflow-y-auto p-2">
+              {flatList.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-10">No tools found</p>
+              ) : grouped ? (
+                grouped.map((group) => (
+                  <div key={group.cat.id} className="mb-1.5">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.14em] px-2.5 py-1.5">
+                      {group.cat.label}
+                    </p>
+                    {group.tools.map((r) => {
+                      const idx = flatList.indexOf(r);
+                      return (
+                        <ResultRow
+                          key={r.tool.id}
+                          tool={r.tool}
+                          index={idx}
+                          active={idx === activeIndex}
+                          query={query}
+                          onHover={() => setActiveIndex(idx)}
+                          onSelect={() => {
+                            onSelect(r.tool.id);
+                            onClose();
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                ))
+              ) : (
+                flatList.map((r, idx) => (
+                  <ResultRow
+                    key={r.tool.id}
+                    tool={r.tool}
+                    index={idx}
+                    active={idx === activeIndex}
+                    query={query}
+                    onHover={() => setActiveIndex(idx)}
+                    onSelect={() => {
+                      onSelect(r.tool.id);
+                      onClose();
+                    }}
+                  />
+                ))
+              )}
+            </div>
+
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/50 bg-secondary/25">
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <ArrowUp size={11} />
+                  <ArrowDown size={11} /> navigate
+                </span>
+                <span className="flex items-center gap-1">
+                  <CornerDownLeft size={11} /> select
+                </span>
+              </div>
+              <button
+                onClick={onToggleTheme}
+                className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {isDark ? <Sun size={12} /> : <Moon size={12} />}
+                {isDark ? 'Light' : 'Dark'}
+              </button>
+            </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
+      )}
     </AnimatePresence>
   );
 }
 
 function ResultRow({
-  tool, index, active, query, onHover, onSelect,
+  tool,
+  index,
+  active,
+  query,
+  onHover,
+  onSelect,
 }: {
-  tool: ToolDef; index: number; active: boolean; query: string; onHover: () => void; onSelect: () => void;
+  tool: ToolDef;
+  index: number;
+  active: boolean;
+  query: string;
+  onHover: () => void;
+  onSelect: () => void;
 }) {
   const Icon = tool.icon;
   return (
@@ -195,19 +214,26 @@ function ResultRow({
       data-index={index}
       onMouseEnter={onHover}
       onClick={onSelect}
-      className={`w-full flex items-center gap-4 px-3.5 py-3.5 rounded-2xl text-left transition-all ${
-        active ? 'bg-secondary text-foreground shadow-sm ring-1 ring-primary/20' : 'text-foreground hover:bg-secondary/70'
+      className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl text-left transition-colors ${
+        active ? 'bg-secondary text-foreground' : 'text-foreground hover:bg-secondary/60'
       }`}
     >
-      <div className={`p-2.5 rounded-xl ${active ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20' : 'bg-secondary text-muted-foreground'}`}>
-        <Icon size={18} />
+      <div
+        className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 ${
+          active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+        }`}
+      >
+        <Icon size={15} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-base font-semibold">
+        <p className="text-sm font-semibold leading-tight">
           <HighlightedText text={tool.label} query={query} />
         </p>
-        <p className="text-sm text-muted-foreground truncate leading-6">{tool.description}</p>
+        <p className="text-xs text-muted-foreground truncate mt-0.5">{tool.description}</p>
       </div>
+      {active && (
+        <kbd className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-md bg-background/70 text-muted-foreground ring-1 ring-border/50 font-mono">↵</kbd>
+      )}
     </button>
   );
 }
