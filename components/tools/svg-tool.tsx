@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Upload, AlertCircle } from 'lucide-react';
-import { ToolCard, ToolTextarea, ToolBar } from '@/components/tool-card';
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Upload, AlertCircle, X, Check, Copy, Code2, MonitorPlay, FileJson, Smartphone, Link } from 'lucide-react';
 import { CopyButton } from '@/components/copy-button';
 import { formatBytes } from '@/lib/json-utils';
 
@@ -68,11 +68,17 @@ function svgToReactNative(svg: string, componentName: string): string {
   return `import Svg, { ${uniqueImports.filter((i) => i !== 'Svg').join(', ')} } from 'react-native-svg';\n\nfunction ${componentName}(props: SvgProps) {\n  return (\n    ${body.replace(/<Svg/, '<Svg {...props}')}\n  );\n}`;
 }
 
+type TabMode = 'minify' | 'jsx' | 'rn' | 'uri';
+
 export default function SvgTool() {
   const [input, setInput] = useState('');
-  const [error, setError] = useState('');
-  const [tab, setTab] = useState<'minify' | 'jsx' | 'rn' | 'uri'>('minify');
+  const [showOutput, setShowOutput] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [tab, setTab] = useState<TabMode>('minify');
+  const [copied, setCopied] = useState(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const isValidSvg = useMemo(() => input.trim().startsWith('<svg') || input.includes('<svg'), [input]);
 
@@ -82,133 +88,326 @@ export default function SvgTool() {
   const dataUri = useMemo(() => (isValidSvg ? toDataUri(minified) : ''), [minified, isValidSvg]);
   const base64Uri = useMemo(() => (isValidSvg ? toBase64Uri(minified) : ''), [minified, isValidSvg]);
 
-  const loadFile = useCallback((file: File) => {
-    if (!file.type.includes('svg') && !file.name.endsWith('.svg')) {
-      setError('Please upload an .svg file');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => setInput((e.target?.result as string) ?? '');
-    reader.readAsText(file);
-  }, []);
-
   const savings = input.trim() && minified
     ? Math.round(((input.length - minified.length) / input.length) * 100)
     : 0;
 
+  const handleInputChange = (value: string) => {
+    setInput(value);
+    if (!value.trim()) {
+      setShowOutput(false);
+      return;
+    }
+    // We can auto-show output if they paste valid SVG
+    if (value.trim().startsWith('<svg') || value.includes('<svg')) {
+      setTimeout(() => setShowOutput(true), 100);
+    }
+  };
+
+  const loadFileContent = (text: string) => {
+    setInput(text);
+    if (text.trim().startsWith('<svg') || text.includes('<svg')) {
+      setShowOutput(true);
+    }
+  };
+
+  const handleFile = (file: File) => {
+    if (!file.type.includes('svg') && !file.name.endsWith('.svg')) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (text) loadFileContent(text);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const clear = () => {
+    setInput('');
+    setShowOutput(false);
+  };
+
+  const activeOutputText = useMemo(() => {
+    if (tab === 'minify') return minified;
+    if (tab === 'jsx') return jsxOutput;
+    if (tab === 'rn') return rnOutput;
+    return `URL Encoded:\n${dataUri}\n\nBase64:\n${base64Uri}`;
+  }, [tab, minified, jsxOutput, rnOutput, dataUri, base64Uri]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(activeOutputText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <ToolCard minHeight="min-h-[500px]">
-        <div className="flex items-center justify-between px-4 pt-4">
-          <span className="text-xs font-medium text-muted-foreground">SVG source</span>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+    <div className="w-full h-full max-w-5xl mx-auto">
+      <AnimatePresence mode="wait">
+        {!showOutput ? (
+          <motion.div 
+            key="input"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+            className="flex flex-col"
           >
-            <Upload size={12} /> Upload .svg
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".svg,image/svg+xml"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) loadFile(f); e.target.value = ''; }}
-          />
-        </div>
-        <ToolTextarea
-          value={input}
-          onChange={(v) => { setInput(v); setError(''); }}
-          placeholder={`<svg viewBox="0 0 24 24" fill="none">\n  <path d="M12 2L2 22h20L12 2z" />\n</svg>`}
-        />
-        <ToolBar>
-          <span className={`text-xs ${error ? 'text-destructive' : 'text-muted-foreground'}`}>
-            {error ? (
-              <span className="flex items-center gap-1"><AlertCircle size={12} /> {error}</span>
-            ) : input && !isValidSvg ? (
-              'No <svg> tag detected'
-            ) : (
-              `${formatBytes(new Blob([input]).size)}`
-            )}
-          </span>
-        </ToolBar>
-      </ToolCard>
+            <div
+              className={`surface-panel relative rounded-3xl overflow-hidden flex flex-col h-full min-h-96 lg:min-h-[640px] transition-colors duration-200 ${
+                isDragging ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+              }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+            >
+              <AnimatePresence>
+                {isDragging && (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="absolute inset-0 z-20 bg-background/90 flex items-center justify-center pointer-events-none"
+                  >
+                    <div className="absolute inset-6 border-2 border-dashed border-primary/50 rounded-2xl animate-pulse"></div>
+                    <motion.div 
+                      animate={{ y: [0, -8, 0] }}
+                      transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                      className="flex flex-col items-center gap-4 text-primary"
+                    >
+                      <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Upload size={36} />
+                      </div>
+                      <div className="text-center">
+                        <span className="text-lg font-bold block mb-1 text-foreground">Drop SVG file</span>
+                        <span className="text-sm text-muted-foreground font-medium">Release to view & convert</span>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-      <div className="space-y-4">
-        <ToolCard minHeight="min-h-56" className="p-0">
-          <div className="flex-1 flex items-center justify-center p-8 bg-[repeating-conic-gradient(var(--secondary)_0%_25%,transparent_0%_50%)] bg-size-[16px_16px]">
-            {isValidSvg ? (
-              <div
-                className="w-32 h-32 [&_svg]:w-full [&_svg]:h-full text-foreground"
-                dangerouslySetInnerHTML={{ __html: minified || input }}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".svg,image/svg+xml"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFile(file);
+                  e.target.value = '';
+                }}
               />
-            ) : (
-              <p className="text-xs text-muted-foreground">Preview appears here</p>
-            )}
-          </div>
-        </ToolCard>
 
-        <ToolCard>
-          <div className="flex gap-0 px-4 pt-2 border-b border-border/20 overflow-x-auto">
-            {([
-              { id: 'minify' as const, label: 'Minified' },
-              { id: 'jsx' as const, label: 'React JSX' },
-              { id: 'rn' as const, label: 'React Native' },
-              { id: 'uri' as const, label: 'Data URI' },
-            ]).map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`px-3 py-2.5 text-xs font-medium border-b-2 shrink-0 ${
-                  tab === t.id ? 'text-foreground border-primary' : 'text-muted-foreground border-transparent'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div className="p-4 flex-1 overflow-auto max-h-72">
-            {!isValidSvg ? (
-              <p className="text-xs text-muted-foreground">Paste an SVG to see output</p>
-            ) : tab === 'minify' ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-accent">Saved {savings}% ({formatBytes(input.length)} → {formatBytes(minified.length)})</span>
-                  <CopyButton text={minified} size={14} />
-                </div>
-                <pre className="text-xs font-mono whitespace-pre-wrap break-all text-foreground/80">{minified}</pre>
-              </div>
-            ) : tab === 'jsx' ? (
-              <div className="space-y-2">
-                <div className="flex justify-end"><CopyButton text={jsxOutput} size={14} /></div>
-                <pre className="text-xs font-mono whitespace-pre-wrap break-all text-foreground/80">{jsxOutput}</pre>
-              </div>
-            ) : tab === 'rn' ? (
-              <div className="space-y-2">
-                <div className="flex justify-end"><CopyButton text={rnOutput} size={14} /></div>
-                <pre className="text-xs font-mono whitespace-pre-wrap break-all text-foreground/80">{rnOutput}</pre>
-                <p className="text-[10px] text-muted-foreground">Requires <code>react-native-svg</code></p>
-              </div>
-            ) : (
-              <div className="space-y-4">
+              <div className="flex items-center justify-between gap-4 border-b border-border/50 bg-card px-8 py-5">
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-muted-foreground uppercase">URL-encoded</span>
-                    <CopyButton text={dataUri} size={12} />
-                  </div>
-                  <p className="text-xs font-mono break-all text-foreground/70">{dataUri}</p>
+                  <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">SVG input</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">Paste SVG code or drop a .svg file to preview and convert it.</p>
                 </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-muted-foreground uppercase">Base64</span>
-                    <CopyButton text={base64Uri} size={12} />
-                  </div>
-                  <p className="text-xs font-mono break-all text-foreground/70">{base64Uri}</p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="hidden sm:inline-flex items-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-secondary/80 active:scale-95"
+                >
+                  <Upload size={16} />
+                  Upload
+                </button>
+              </div>
+
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => handleInputChange(e.target.value)}
+                placeholder={`Paste SVG code or drop a .svg file...\n\n<svg viewBox="0 0 24 24" fill="none">\n  <path d="M12 2L2 22h20L12 2z" />\n</svg>`}
+                className="flex-1 bg-background/35 p-8 font-mono text-base resize-none focus:outline-none placeholder-muted-foreground/55 leading-8"
+              />
+
+              <div className="border-t border-border/50 bg-card px-8 py-5 flex items-center justify-between gap-5">
+                <div className="flex items-center gap-2 min-w-0">
+                  {input && !isValidSvg && <AlertCircle size={16} className="text-destructive shrink-0" />}
+                  <span
+                    className={`text-sm font-medium truncate ${
+                      input && !isValidSvg ? 'text-destructive' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {input && !isValidSvg ? 'No <svg> tag detected' : 'Paste SVG code or upload a file...'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {input && (
+                    <button
+                      onClick={clear}
+                      className="p-2.5 rounded-xl hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+                      title="Clear"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                  {isValidSvg && (
+                    <button
+                      onClick={() => setShowOutput(true)}
+                      className="ml-2 px-5 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+                    >
+                      Preview & Convert
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </ToolCard>
-      </div>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="output"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+            className="flex flex-col h-full min-h-96 lg:min-h-[640px] gap-6"
+          >
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+              <div className="flex items-center gap-1 bg-secondary/40 p-1.5 rounded-2xl w-fit overflow-x-auto no-scrollbar shrink-0 border border-border/30">
+                {(['minify', 'jsx', 'rn', 'uri'] as const).map((t) => {
+                  const icons = {
+                    minify: <MonitorPlay size={14} className="mr-2" />,
+                    jsx: <FileJson size={14} className="mr-2" />,
+                    rn: <Smartphone size={14} className="mr-2" />,
+                    uri: <Link size={14} className="mr-2" />
+                  };
+                  const labels = {
+                    minify: 'Minified',
+                    jsx: 'React JSX',
+                    rn: 'React Native',
+                    uri: 'Data URIs'
+                  };
+                  return (
+                    <button
+                      key={t}
+                      onClick={() => setTab(t)}
+                      className={`flex items-center px-5 py-2.5 text-sm font-semibold rounded-xl capitalize whitespace-nowrap transition-all ${
+                        tab === t
+                          ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50'
+                          : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/60'
+                      }`}
+                    >
+                      {icons[t]} {labels[t]}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              <div className="flex items-center gap-1 shrink-0 bg-secondary/40 p-1.5 rounded-2xl border border-border/30">
+                <button
+                  onClick={handleCopy}
+                  className="p-2.5 rounded-xl hover:bg-background transition-all active:scale-95 text-muted-foreground hover:text-foreground flex items-center gap-2"
+                  title="Copy Output"
+                >
+                  {copied ? <Check size={14} className="text-accent" /> : <Copy size={14} />}
+                  <span className="text-xs font-medium pr-1 hidden sm:inline">Copy</span>
+                </button>
+                <div className="w-px h-5 bg-border/50 mx-1"></div>
+                <button
+                  onClick={clear}
+                  className="p-2.5 rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all active:scale-95 flex items-center gap-2"
+                  title="Clear & Edit"
+                >
+                  <X size={14} /> <span className="text-xs font-medium pr-1 hidden sm:inline">Clear</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 surface-panel rounded-3xl overflow-hidden flex flex-col xl:flex-row transition-colors duration-200">
+              {/* Left Side: SVG Source Editor */}
+              <div className="w-full xl:w-1/2 flex flex-col border-b xl:border-b-0 xl:border-r border-border/50">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-card">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Code2 size={14} /> Source Code
+                  </span>
+                  <span className="text-xs text-muted-foreground">{formatBytes(input.length)}</span>
+                </div>
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  className="flex-1 bg-background/35 p-6 font-mono text-xs leading-relaxed resize-none focus:outline-none text-foreground/80 whitespace-pre"
+                  spellCheck={false}
+                />
+              </div>
+              
+              {/* Right Side: Preview and Output */}
+              <div className="w-full xl:w-1/2 flex flex-col bg-card/50">
+                {/* Preview Panel */}
+                <div className="h-64 border-b border-border/50 relative bg-[repeating-conic-gradient(var(--secondary)_0%_25%,transparent_0%_50%)] bg-size-[16px_16px] flex items-center justify-center p-8 shrink-0">
+                  <div className="absolute top-4 left-6">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-background/80 px-2 py-1 rounded-md">Live Preview</span>
+                  </div>
+                  {isValidSvg ? (
+                    <div
+                      className="w-full h-full flex items-center justify-center [&_svg]:max-w-full [&_svg]:max-h-full text-foreground"
+                      dangerouslySetInnerHTML={{ __html: minified || input }}
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Invalid SVG</p>
+                  )}
+                </div>
+                
+                {/* Output Panel */}
+                <div className="flex-1 flex flex-col min-h-[300px]">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-card">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {tab === 'minify' && 'Minified Output'}
+                      {tab === 'jsx' && 'React Component'}
+                      {tab === 'rn' && 'React Native Component'}
+                      {tab === 'uri' && 'Data URIs'}
+                    </span>
+                    {tab === 'minify' && (
+                      <span className="text-xs text-accent font-medium">Saved {savings}%</span>
+                    )}
+                  </div>
+                  
+                  <div className="flex-1 p-6 overflow-auto bg-background/35">
+                    {tab === 'uri' ? (
+                      <div className="space-y-6">
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-foreground">URL-encoded</span>
+                            <CopyButton text={dataUri} size={14} />
+                          </div>
+                          <p className="text-xs font-mono break-all text-muted-foreground leading-relaxed bg-secondary/50 p-4 rounded-xl border border-border/30">
+                            {dataUri}
+                          </p>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-foreground">Base64</span>
+                            <CopyButton text={base64Uri} size={14} />
+                          </div>
+                          <p className="text-xs font-mono break-all text-muted-foreground leading-relaxed bg-secondary/50 p-4 rounded-xl border border-border/30">
+                            {base64Uri}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <pre className="text-xs font-mono text-foreground/80 leading-relaxed break-all whitespace-pre-wrap">
+                        {activeOutputText}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

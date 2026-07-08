@@ -78,6 +78,44 @@ export default function DeeplinkTool() {
     }, null, 2);
   }, [scheme, linkType, universalDomain]);
 
+  const androidManifest = useMemo(() => {
+    return `<intent-filter android:autoVerify="true">
+  <action android:name="android.intent.action.VIEW" />
+  <category android:name="android.intent.category.DEFAULT" />
+  <category android:name="android.intent.category.BROWSABLE" />
+  ${linkType === 'universal' ? `<data android:scheme="https" android:host="${universalDomain}" />` : `<data android:scheme="${scheme}" />`}
+</intent-filter>`;
+  }, [scheme, linkType, universalDomain]);
+
+  const iosPlist = useMemo(() => {
+    return `<key>CFBundleURLTypes</key>
+<array>
+  <dict>
+    <key>CFBundleURLSchemes</key>
+    <array>
+      <string>${scheme}</string>
+    </array>
+  </dict>
+</array>`;
+  }, [scheme]);
+
+  const iosEntitlements = useMemo(() => {
+    if (linkType !== 'universal') return null;
+    return `<key>com.apple.developer.associated-domains</key>
+<array>
+  <string>applinks:${universalDomain}</string>
+</array>`;
+  }, [linkType, universalDomain]);
+
+  const testCommands = useMemo(() => {
+    const url = urls[0]?.url || '';
+    return {
+      ios: `xcrun simctl openurl booted "${url}"`,
+      android: `adb shell am start -W -a android.intent.action.VIEW -d "${url}"`,
+      expo: `npx uri-scheme open "${url}" --ios`,
+    };
+  }, [urls]);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <ToolCard className="p-6 space-y-5">
@@ -139,11 +177,49 @@ export default function DeeplinkTool() {
         </ToolCard>
 
         <ToolCard className="p-4">
-          <ToolBar>
-            <span className="text-xs text-muted-foreground">
-              Test with: <code className="text-primary">npx uri-scheme open &quot;{urls[0]?.url}&quot; --ios</code>
-            </span>
-          </ToolBar>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-muted-foreground">AndroidManifest.xml snippet</span>
+            <CopyButton text={androidManifest} size={14} />
+          </div>
+          <pre className="text-xs font-mono overflow-auto max-h-48 text-foreground/70">{androidManifest}</pre>
+        </ToolCard>
+
+        <ToolCard className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-muted-foreground">Info.plist snippet</span>
+            <CopyButton text={iosPlist} size={14} />
+          </div>
+          <pre className="text-xs font-mono overflow-auto max-h-48 text-foreground/70">{iosPlist}</pre>
+        </ToolCard>
+
+        {iosEntitlements && (
+          <ToolCard className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-muted-foreground">Entitlements.plist snippet</span>
+              <CopyButton text={iosEntitlements} size={14} />
+            </div>
+            <pre className="text-xs font-mono overflow-auto max-h-48 text-foreground/70">{iosEntitlements}</pre>
+          </ToolCard>
+        )}
+
+        <ToolCard className="p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-muted-foreground">Test Commands</span>
+          </div>
+          <div className="space-y-3 mt-2">
+            <div className="flex items-center justify-between bg-secondary/50 p-2 rounded-md">
+              <span className="text-xs font-mono text-primary truncate mr-4">{testCommands.ios}</span>
+              <CopyButton text={testCommands.ios} size={14} />
+            </div>
+            <div className="flex items-center justify-between bg-secondary/50 p-2 rounded-md">
+              <span className="text-xs font-mono text-primary truncate mr-4">{testCommands.android}</span>
+              <CopyButton text={testCommands.android} size={14} />
+            </div>
+            <div className="flex items-center justify-between bg-secondary/50 p-2 rounded-md">
+              <span className="text-xs font-mono text-primary truncate mr-4">{testCommands.expo}</span>
+              <CopyButton text={testCommands.expo} size={14} />
+            </div>
+          </div>
         </ToolCard>
       </div>
     </div>

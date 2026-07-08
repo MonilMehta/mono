@@ -15,7 +15,7 @@ const playfair = Playfair_Display({
 })
 
 export const metadata: Metadata = {
-  title: 'Dev Toolbox — JSON, JWT, Base64 & more',
+  title: 'mono — Developer Toolbox',
   description: 'Daily developer utilities for Expo and web: JSON inspector, JWT decoder, Base64, URL parser, timestamps, UUIDs, colors, diff, regex, and Expo deep links.',
   generator: 'v0.app',
   icons: {

@@ -12,6 +12,8 @@ import {
   Smartphone,
   ImageIcon,
   PenTool,
+  Hash,
+  Layers,
 } from 'lucide-react';
 
 export type ToolId =
@@ -26,7 +28,9 @@ export type ToolId =
   | 'regex'
   | 'deeplink'
   | 'image'
-  | 'svg';
+  | 'svg'
+  | 'blurhash'
+  | 'app-asset';
 
 export interface ToolDef {
   id: ToolId;
@@ -42,6 +46,8 @@ export const TOOLS: ToolDef[] = [
   { id: 'diff', label: 'Diff', description: 'Compare two texts', category: 'data', icon: GitCompare, keywords: ['compare', 'changes'] },
   { id: 'image', label: 'Image', description: 'Inspect, compress & convert', category: 'media', icon: ImageIcon, keywords: ['png', 'jpg', 'webp', 'compress', 'resize'] },
   { id: 'svg', label: 'SVG', description: 'Preview, minify & export', category: 'media', icon: PenTool, keywords: ['vector', 'icon', 'jsx', 'react-native'] },
+  { id: 'blurhash', label: 'BlurHash', description: 'Generate image hashes', category: 'mobile', icon: Hash, keywords: ['thumbhash', 'placeholder', 'react-native', 'expo-image'] },
+  { id: 'app-asset', label: 'App Assets', description: 'Generate icons & splash', category: 'mobile', icon: Layers, keywords: ['expo', 'react-native', 'icon', 'splash'] },
   { id: 'deeplink', label: 'Deep Link', description: 'Build Expo / app URLs', category: 'mobile', icon: Smartphone, keywords: ['expo', 'scheme', 'universal link'] },
   { id: 'base64', label: 'Base64', description: 'Encode & decode', category: 'encode', icon: Binary, keywords: ['b64'] },
   { id: 'url', label: 'URL', description: 'Encode & decode URLs', category: 'encode', icon: Link, keywords: ['uri', 'query', 'params'] },

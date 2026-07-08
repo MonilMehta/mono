@@ -19,6 +19,8 @@ import RegexTool from '@/components/tools/regex-tool';
 import DeeplinkTool from '@/components/tools/deeplink-tool';
 import ImageTool from '@/components/tools/image-tool';
 import SvgTool from '@/components/tools/svg-tool';
+import BlurhashTool from '@/components/tools/blurhash-tool';
+import AppAssetTool from '@/components/tools/app-asset-tool';
 
 const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   json: JsonTool,
@@ -33,6 +35,8 @@ const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   deeplink: DeeplinkTool,
   image: ImageTool,
   svg: SvgTool,
+  blurhash: BlurhashTool,
+  'app-asset': AppAssetTool,
 };
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -106,12 +110,11 @@ function DevToolboxInner() {
       >
         <div className={`p-5 border-b border-sidebar-border/70 flex items-center justify-between transition-all ${!sidebarOpen ? 'lg:p-0 lg:py-6 lg:justify-center' : ''}`}>
           <div className={`flex items-center gap-4 ${!sidebarOpen ? 'lg:justify-center' : ''}`}>
-            <div className="w-11 h-11 rounded-2xl bg-primary flex items-center justify-center shrink-0 shadow-sm ring-1 ring-primary/20">
-              <Command size={20} className="text-primary-foreground" />
+            <div className="w-11 h-11 flex items-center justify-center shrink-0">
+              <img src="/logo.png" alt="Mono logo" className="w-9 h-9 object-contain" />
             </div>
-            <div className={`overflow-hidden transition-all duration-300 ${!sidebarOpen ? 'w-0 opacity-0 lg:hidden' : 'w-[170px] opacity-100'}`}>
-              <h1 className="text-2xl font-semibold tracking-[-0.04em] text-sidebar-foreground leading-none">Dev Toolbox</h1>
-              <p className="mt-1.5 text-xs font-medium text-muted-foreground">Internal developer utilities</p>
+            <div className={`overflow-hidden transition-all duration-300 flex items-center h-11 ${!sidebarOpen ? 'w-0 opacity-0 lg:hidden' : 'w-[170px] opacity-100'}`}>
+              <h1 className="text-3xl font-bold tracking-tight text-sidebar-foreground leading-none" style={{ fontFamily: 'var(--font-playfair), serif', fontStyle: 'italic' }}>mono</h1>
             </div>
           </div>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-2 text-muted-foreground hover:bg-sidebar-accent active:scale-95 transition-all rounded-xl">

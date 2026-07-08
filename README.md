@@ -1,4 +1,4 @@
-# Dev Toolbox
+# mono
 
 A fast, keyboard-first collection of daily developer utilities — built for engineers who work with large JSON payloads, Expo/React Native apps, and web APIs every day. Everything runs client-side in the browser; nothing you paste ever leaves your machine.
 
@@ -102,6 +102,21 @@ lib/
 That's it — the sidebar, command palette, and keyboard shortcuts pick it up automatically.
 
 ## Roadmap / Future Tools
+
+### Media & assets
+
+- **Image Resizer**: Resize by width/height, percentage, or with aspect-ratio lock. Preset sizes for app icon, OG image, story, square, splash, and banner.
+- **App Asset Generator**: Upload one image and generate iOS icon sizes, Android icon sizes, adaptive icon foreground/background checks, splash screen sizes, favicon sizes, and a ready-to-paste `app.json` / `app.config.ts` snippet. Built for Expo / React Native.
+- **BlurHash / ThumbHash Generator**: Upload an image to generate a BlurHash string, ThumbHash string, live preview placeholder, and a React Native usage snippet.
+- **Palette Extractor**: Upload an image to extract a dominant palette and muted/vibrant colors. Copy as hex/RGB/HSL, or export Tailwind tokens, CSS variables, and a React Native theme object.
+
+### Typography
+
+- **Font Inspector**: Upload `.ttf`, `.otf`, `.woff`, or `.woff2` and inspect font family name, style, weight, glyph count, supported characters, file size, format, and naming metadata.
+- **Type Scale Generator**: Input a base size and ratio to generate `xs` through `5xl` with font size, line height, and letter spacing. Export as CSS variables, Tailwind config, or React Native tokens.
+- **Line-Height Calculator**: Enter a font size and get a recommended line height. Convert px ↔ unitless, with React Native style and CSS output.
+
+### Data & API
 
 - **Log Formatter**: Paste messy logs and get timestamp highlighting, JSON object extraction, error grouping, stack trace formatting, and filtering by level (error/warn/info).
 - **Stack Trace Cleaner**: Paste stack traces from JS/RN/Next to separate app frames from node_modules, generate clean clickable-looking file paths, view compactly, and extract error messages.
