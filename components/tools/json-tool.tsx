@@ -18,15 +18,27 @@ import {
 } from 'lucide-react';
 import JsonViewer, { type ExpandMode } from '@/components/json-viewer';
 import { HighlightedText } from '@/components/highlighted-text';
-import { debounce } from '@/lib/debounce';
 import {
   parseJson,
   computeStats,
+  computeLightweightStats,
   formatBytes,
   deleteAtPath,
+  extractRootArrayFields,
+  flattenJson,
+  queryJsonPath,
+  removeJsonKey,
+  renameJsonKey,
+  repairJson,
+  sortJsonKeys,
+  unflattenJson,
   type JsonStats,
   type ParseError,
 } from '@/lib/json-utils';
+
+const LARGE_PAYLOAD_CHARS = 1_000_000;
+const LARGE_PAYLOAD_KEYS = 5_000;
+const MANUAL_VALIDATION_CHARS = 5_000_000;
 
 export default function JsonTool() {
   const [input, setInput] = useState('');
@@ -43,12 +55,24 @@ export default function JsonTool() {
   const [expandMode, setExpandMode] = useState<ExpandMode>('default');
   const [isDragging, setIsDragging] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
+  const [requiresManualValidation, setRequiresManualValidation] = useState(false);
+  const [workspacePanel, setWorkspacePanel] = useState<'query' | 'transform' | null>(null);
+  const [queryInput, setQueryInput] = useState('$');
+  const [queryRequest, setQueryRequest] = useState<string | null>(null);
+  const [repairPreview, setRepairPreview] = useState<{ text: string; changes: string[] } | null>(null);
+  const [transformError, setTransformError] = useState('');
+  const [extractFields, setExtractFields] = useState('');
+  const [renameFrom, setRenameFrom] = useState('');
+  const [renameTo, setRenameTo] = useState('');
+  const [removeKey, setRemoveKey] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const validationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipDebounceRef = useRef(false);
 
   const validateJSON = useCallback((json: string) => {
     setIsValidating(true);
+    setRequiresManualValidation(false);
     const trimmed = json.trim();
     if (!trimmed) {
       setParseError(null);
@@ -61,11 +85,18 @@ export default function JsonTool() {
 
     const result = parseJson(trimmed);
     if (result.ok) {
-      const formatted = JSON.stringify(result.data, null, 2);
+      const isLargeInput = json.length > LARGE_PAYLOAD_CHARS;
+      const formatted = isLargeInput ? json : JSON.stringify(result.data, null, 2);
+      const nextStats = isLargeInput ? computeLightweightStats(json) : computeStats(json, result.data);
       setParseError(null);
       setOutput(formatted);
       setParsedData(result.data);
-      setStats(computeStats(json, result.data));
+      setStats(nextStats);
+      if (nextStats.isLarge || nextStats.keys > LARGE_PAYLOAD_KEYS) {
+        setActiveTab('formatted');
+        setSearchInput('');
+        setSearchQuery('');
+      }
       setIsValidating(false);
       return true;
     }
@@ -78,19 +109,38 @@ export default function JsonTool() {
     return false;
   }, []);
 
-  const debouncedValidate = useMemo(
-    () => debounce((json: string) => validateJSON(json), 300),
-    [validateJSON]
-  );
+  const cancelScheduledValidation = useCallback(() => {
+    if (validationTimerRef.current) clearTimeout(validationTimerRef.current);
+    validationTimerRef.current = null;
+  }, []);
 
-  useEffect(() => {
-    return () => debouncedValidate.cancel();
-  }, [debouncedValidate]);
+  const scheduleValidation = useCallback((json: string) => {
+    cancelScheduledValidation();
+    setIsValidating(true);
+    validationTimerRef.current = setTimeout(
+      () => validateJSON(json),
+      json.length > LARGE_PAYLOAD_CHARS ? 700 : 300
+    );
+  }, [cancelScheduledValidation, validateJSON]);
+
+  useEffect(() => cancelScheduledValidation, [cancelScheduledValidation]);
 
   const handleInputChange = (value: string) => {
     setInput(value);
+    setRepairPreview(null);
     if (!value.trim()) {
-      debouncedValidate.cancel();
+      cancelScheduledValidation();
+      setParseError(null);
+      setStats(null);
+      setParsedData(null);
+      setOutput('');
+      setRequiresManualValidation(false);
+      return;
+    }
+    if (value.length > MANUAL_VALIDATION_CHARS) {
+      cancelScheduledValidation();
+      setRequiresManualValidation(true);
+      setIsValidating(false);
       setParseError(null);
       setStats(null);
       setParsedData(null);
@@ -101,14 +151,23 @@ export default function JsonTool() {
       skipDebounceRef.current = false;
       validateJSON(value);
     } else {
-      setIsValidating(true);
-      debouncedValidate(value);
+      scheduleValidation(value);
     }
   };
 
   const loadFileContent = (text: string) => {
+    cancelScheduledValidation();
     skipDebounceRef.current = true;
     setInput(text);
+    if (text.length > MANUAL_VALIDATION_CHARS) {
+      setRequiresManualValidation(true);
+      setIsValidating(false);
+      setParseError(null);
+      setStats(null);
+      setParsedData(null);
+      setOutput('');
+      return;
+    }
     validateJSON(text);
     if (text.trim()) setShowOutput(true);
   };
@@ -138,12 +197,14 @@ export default function JsonTool() {
 
   const handleDownload = () => {
     const element = document.createElement('a');
-    element.setAttribute('href', 'data:application/json;charset=utf-8,' + encodeURIComponent(output));
+    const url = URL.createObjectURL(new Blob([output], { type: 'application/json;charset=utf-8' }));
+    element.setAttribute('href', url);
     element.setAttribute('download', 'data.json');
     element.style.display = 'none';
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+    URL.revokeObjectURL(url);
   };
 
   const handleExpandAll = () => setExpandMode('all');
@@ -163,6 +224,9 @@ export default function JsonTool() {
     },
     [parsedData]
   );
+
+  const isLargePayload = input.length > LARGE_PAYLOAD_CHARS || Boolean(stats?.isLarge) || Boolean(stats && stats.keys > LARGE_PAYLOAD_KEYS);
+  const canRenderTree = Boolean(stats && !isLargePayload);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -191,7 +255,7 @@ export default function JsonTool() {
   }, [searchQuery, activeMatchIndex, activeTab, expandMode]);
 
   const matchCount = useMemo(() => {
-    if (!searchQuery.trim() || !parsedData) return 0;
+    if (!searchQuery.trim() || !stats || isLargePayload) return 0;
     
     if (activeTab === 'tree') {
       let count = 0;
@@ -240,13 +304,16 @@ export default function JsonTool() {
       idx = lowerTarget.indexOf(lowerQuery, idx + lowerQuery.length);
     }
     return count;
-  }, [searchQuery, parsedData, activeTab, output]);
+  }, [searchQuery, parsedData, activeTab, output, stats, isLargePayload]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault();
-        if (stats && !parseError) setShowOutput(true);
+        if (requiresManualValidation) {
+          const isValid = validateJSON(input);
+          if (isValid) setShowOutput(true);
+        } else if (stats && !parseError) setShowOutput(true);
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
@@ -267,10 +334,54 @@ export default function JsonTool() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [stats, parseError, showOutput]);
+  }, [input, parseError, requiresManualValidation, stats, showOutput, validateJSON]);
+
+  const queryResult = useMemo(() => {
+    if (!queryRequest || !stats) return null;
+    try {
+      return { matches: queryJsonPath(parsedData, queryRequest, 100), error: '' };
+    } catch (error) {
+      return { matches: [], error: error instanceof Error ? error.message : 'Invalid query' };
+    }
+  }, [parsedData, queryRequest, stats]);
+
+  const applyParsedData = useCallback((nextData: unknown) => {
+    const formatted = JSON.stringify(nextData, null, 2);
+    cancelScheduledValidation();
+    skipDebounceRef.current = true;
+    setInput(formatted);
+    setOutput(formatted);
+    setParsedData(nextData);
+    setStats(computeStats(formatted, nextData));
+    setParseError(null);
+    setRepairPreview(null);
+  }, [cancelScheduledValidation]);
+
+  const prepareRepair = () => {
+    const repaired = repairJson(input);
+    setRepairPreview(repaired);
+    setShowOutput(true);
+  };
+
+  const runTransform = (operation: 'sort' | 'flatten' | 'unflatten' | 'extract' | 'rename' | 'remove') => {
+    if (!stats) return;
+    try {
+      const nextData =
+        operation === 'sort' ? sortJsonKeys(parsedData) :
+        operation === 'flatten' ? flattenJson(parsedData) :
+        operation === 'unflatten' ? unflattenJson(parsedData) :
+        operation === 'extract' ? extractRootArrayFields(parsedData, extractFields.split(',')) :
+        operation === 'rename' ? renameJsonKey(parsedData, renameFrom, renameTo) :
+        removeJsonKey(parsedData, removeKey);
+      applyParsedData(nextData);
+      setTransformError('');
+    } catch (error) {
+      setTransformError(error instanceof Error ? error.message : 'Could not transform this payload');
+    }
+  };
 
   const getOutputContent = () => {
-    if (activeTab === 'tree' && parsedData) {
+    if (activeTab === 'tree' && canRenderTree) {
       return (
         <JsonViewer
           data={parsedData}
@@ -280,7 +391,7 @@ export default function JsonTool() {
         />
       );
     }
-    if (activeTab === 'minified' && parsedData) {
+    if (activeTab === 'minified' && stats && !isLargePayload) {
       const minified = JSON.stringify(parsedData);
       return (
         <pre className="text-sm font-mono whitespace-pre-wrap wrap-break-word leading-7">
@@ -388,6 +499,7 @@ export default function JsonTool() {
                 onPaste={() => {
                   setTimeout(() => {
                     if (textareaRef.current) {
+                      if (textareaRef.current.value.length > LARGE_PAYLOAD_CHARS) return;
                       skipDebounceRef.current = true;
                       const isValid = validateJSON(textareaRef.current.value);
                       if (isValid) setShowOutput(true);
@@ -411,8 +523,12 @@ export default function JsonTool() {
                   >
                     {parseError
                       ? errorDisplay
+                      : requiresManualValidation
+                        ? `Large payload ready · ${formatBytes(input.length)} · validate on demand`
                       : stats
-                        ? `Valid · ${stats.lines} lines · ${formatBytes(stats.size)}`
+                        ? stats.isLarge
+                          ? `Valid large payload · ${formatBytes(stats.size)} source`
+                          : `Valid · ${stats.lines} lines · ${formatBytes(stats.size)}`
                         : 'Paste JSON or upload a file...'}
                   </span>
                 </div>
@@ -452,7 +568,8 @@ export default function JsonTool() {
                         setParsedData(null);
                         setStats(null);
                         setSearchQuery('');
-                        debouncedValidate.cancel();
+                        setRequiresManualValidation(false);
+                        cancelScheduledValidation();
                       }}
                       className="p-2.5 rounded-xl hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
                       title="Clear all (⌘K)"
@@ -468,11 +585,22 @@ export default function JsonTool() {
                       Format <ChevronRight size={14} className={`transition-transform ${showOutput ? 'rotate-90' : ''}`} />
                     </button>
                   )}
+                  {requiresManualValidation && (
+                    <button
+                      onClick={() => {
+                        const isValid = validateJSON(input);
+                        if (isValid) setShowOutput(true);
+                      }}
+                      className="ml-2 px-4 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+                    >
+                      Validate
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
 
-            {stats && !parseError && (
+            {stats && !parseError && !isLargePayload && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -500,7 +628,7 @@ export default function JsonTool() {
             {!parseError && (
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                 <div className="flex items-center gap-1 bg-secondary/40 p-1.5 rounded-2xl w-fit overflow-x-auto no-scrollbar shrink-0 border border-border/30">
-                  {(['tree', 'formatted', 'minified'] as const).map((tab) => (
+                  {(isLargePayload ? (['formatted'] as const) : (['tree', 'formatted', 'minified'] as const)).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
@@ -510,13 +638,14 @@ export default function JsonTool() {
                           : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/60'
                       }`}
                     >
-                      {tab}
+                      {isLargePayload ? 'source' : tab}
                     </button>
                   ))}
                 </div>
                 
                 <div className="flex items-center gap-2 w-full xl:w-auto">
-                  <div className="relative group flex-1 xl:w-[260px]">
+                  {!isLargePayload && (
+                    <div className="relative group flex-1 xl:w-[260px]">
                     <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" />
                     <input
                       id="json-search"
@@ -567,10 +696,28 @@ export default function JsonTool() {
                         </button>
                       </div>
                     )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1 shrink-0 bg-secondary/40 p-1.5 rounded-2xl border border-border/30">
+                    <button
+                      onClick={() => setWorkspacePanel((panel) => panel === 'query' ? null : 'query')}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all ${workspacePanel === 'query' ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50' : 'text-muted-foreground hover:bg-background hover:text-foreground'}`}
+                    >
+                      Query
+                    </button>
+                    <button
+                      onClick={() => setWorkspacePanel((panel) => panel === 'transform' ? null : 'transform')}
+                      disabled={isLargePayload}
+                      title={isLargePayload ? 'Transforms are paused for large payloads' : 'Transform JSON'}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all ${workspacePanel === 'transform' ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50' : 'text-muted-foreground hover:bg-background hover:text-foreground'} disabled:opacity-40`}
+                    >
+                      Transform
+                    </button>
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0 bg-secondary/40 p-1.5 rounded-2xl border border-border/30">
-                    {activeTab === 'tree' && (
+                    {activeTab === 'tree' && canRenderTree && (
                       <>
                         <button
                           onClick={handleExpandAll}
@@ -621,7 +768,7 @@ export default function JsonTool() {
                         setStats(null);
                         setSearchInput('');
                         setSearchQuery('');
-                        debouncedValidate.cancel();
+                        cancelScheduledValidation();
                       }}
                       className="p-2.5 rounded-xl hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all active:scale-95 hidden sm:block"
                       title="Clear & Edit (⌘K)"
@@ -633,13 +780,129 @@ export default function JsonTool() {
               </div>
             )}
 
+            {isLargePayload && !parseError && (
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 px-4 py-3 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">Large payload mode.</span> Tree, search, and transforms are paused to keep the browser responsive. Use formatted output, download, or a focused JSONPath query.
+              </div>
+            )}
+
+            <AnimatePresence initial={false}>
+              {workspacePanel === 'query' && !parseError && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="surface-panel rounded-2xl p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold">JSONPath query</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Supports properties, indices, quoted keys, and wildcards — for example <code>$.data.users[*].email</code>.</p>
+                    </div>
+                    <button onClick={() => setWorkspacePanel(null)} className="p-2 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground" title="Close query">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={queryInput}
+                      onChange={(event) => setQueryInput(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === 'Enter') setQueryRequest(queryInput); }}
+                      placeholder="$.data.users[*].email"
+                      className="min-w-0 flex-1 rounded-xl border border-border/50 bg-secondary/40 px-3 py-2.5 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <button onClick={() => setQueryRequest(queryInput)} className="rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground hover:opacity-90">
+                      Run
+                    </button>
+                  </div>
+                  {queryResult && (
+                    <div className="rounded-xl border border-border/45 bg-secondary/20 p-3">
+                      {queryResult.error ? (
+                        <p className="text-xs text-destructive">{queryResult.error}</p>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between gap-3 mb-2">
+                            <p className="text-xs font-semibold text-foreground">{queryResult.matches.length} match{queryResult.matches.length === 1 ? '' : 'es'}</p>
+                            {queryResult.matches.length > 0 && !isLargePayload && (
+                              <button onClick={() => handleCopy(JSON.stringify(queryResult.matches, null, 2))} className="text-xs font-medium text-primary hover:underline">Copy results</button>
+                            )}
+                          </div>
+                          {queryResult.matches.slice(0, 20).map((match) => (
+                            <div key={match.path} className="border-t border-border/35 py-2 first:border-t-0 first:pt-0">
+                              <p className="font-mono text-[11px] text-primary">{match.path}</p>
+                              <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">{formatQueryValue(match.value)}</pre>
+                            </div>
+                          ))}
+                          {queryResult.matches.length > 20 && <p className="pt-2 text-xs text-muted-foreground">Showing the first 20 of at most 100 matches.</p>}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {workspacePanel === 'transform' && !parseError && !isLargePayload && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="surface-panel rounded-2xl p-4 space-y-4"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold">Transform JSON</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Each action replaces the working payload; copy or download first if you need the original.</p>
+                    </div>
+                    <button onClick={() => setWorkspacePanel(null)} className="p-2 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground" title="Close transforms">
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <TransformButton label="Sort keys" onClick={() => runTransform('sort')} />
+                    <TransformButton label="Flatten" onClick={() => runTransform('flatten')} />
+                    <TransformButton label="Unflatten" onClick={() => runTransform('unflatten')} />
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    <TransformField value={extractFields} onChange={setExtractFields} placeholder="id, email, status" action="Extract root-array fields" onAction={() => runTransform('extract')} />
+                    <div className="flex gap-2">
+                      <input value={renameFrom} onChange={(event) => setRenameFrom(event.target.value)} placeholder="Current key" className="min-w-0 flex-1 rounded-xl border border-border/45 bg-secondary/35 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                      <input value={renameTo} onChange={(event) => setRenameTo(event.target.value)} placeholder="New key" className="min-w-0 flex-1 rounded-xl border border-border/45 bg-secondary/35 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20" />
+                      <TransformButton label="Rename" onClick={() => runTransform('rename')} />
+                    </div>
+                    <TransformField value={removeKey} onChange={setRemoveKey} placeholder="Key name" action="Remove matching keys" onAction={() => runTransform('remove')} />
+                  </div>
+                  {transformError && <p className="text-xs text-destructive">{transformError}</p>}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="flex-1 surface-panel rounded-2xl overflow-hidden flex flex-col transition-colors duration-200">
               <div className="flex-1 overflow-auto p-5">
                 {parseError ? (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     <div className="text-sm text-destructive font-mono">{errorDisplay}</div>
                     {parseError.line && (
                       <ErrorSnippet input={input} line={parseError.line} column={parseError.column} />
+                    )}
+                    {isLargePayload ? (
+                      <p className="text-xs text-muted-foreground">Repair is paused for large payloads because it needs a full source pass.</p>
+                    ) : !repairPreview ? (
+                      <button onClick={prepareRepair} className="rounded-xl bg-secondary px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary/70">
+                        Prepare safe repair
+                      </button>
+                    ) : repairPreview.changes.length > 0 ? (
+                      <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-foreground">Repair preview</p>
+                          <button onClick={() => { loadFileContent(repairPreview.text); setRepairPreview(null); }} className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90">
+                            Apply repair
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{repairPreview.changes.join(' · ')}</p>
+                        <pre className="max-h-64 overflow-auto rounded-xl bg-background/60 p-3 text-xs font-mono text-foreground/75 whitespace-pre-wrap">{repairPreview.text}</pre>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No safe repair was found. The source is left unchanged.</p>
                     )}
                   </div>
                 ) : (
@@ -663,6 +926,71 @@ function StatPill({ label, value }: { label: string; value: string | number }) {
       <p className="text-sm font-semibold text-primary tabular-nums">{value}</p>
     </div>
   );
+}
+
+function TransformButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="shrink-0 rounded-xl border border-border/50 bg-secondary/45 px-3 py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+    >
+      {label}
+    </button>
+  );
+}
+
+function TransformField({
+  value,
+  onChange,
+  placeholder,
+  action,
+  onAction,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  action: string;
+  onAction: () => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 rounded-xl border border-border/45 bg-secondary/35 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
+      />
+      <TransformButton label={action} onClick={onAction} />
+    </div>
+  );
+}
+
+function formatQueryValue(value: unknown): string {
+  const preview = (current: unknown, depth: number): unknown => {
+    if (depth >= 3) return '…';
+    if (Array.isArray(current)) {
+      const items = current.slice(0, 8).map((item) => preview(item, depth + 1));
+      return current.length > 8 ? [...items, `… ${current.length - 8} more`] : items;
+    }
+    if (current !== null && typeof current === 'object') {
+      const result: Record<string, unknown> = {};
+      let count = 0;
+      for (const key in current) {
+        if (!Object.hasOwn(current, key)) continue;
+        if (count === 8) {
+          result['…'] = 'more keys';
+          break;
+        }
+        result[key] = preview((current as Record<string, unknown>)[key], depth + 1);
+        count++;
+      }
+      return result;
+    }
+    if (typeof current === 'string' && current.length > 400) return `${current.slice(0, 400)}…`;
+    return current;
+  };
+
+  return JSON.stringify(preview(value, 0), null, 2) ?? 'undefined';
 }
 
 function ErrorSnippet({ input, line, column }: { input: string; line: number; column?: number }) {

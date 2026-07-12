@@ -3,17 +3,15 @@
 import { Suspense, useCallback, useEffect, useState, type ComponentType } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Moon, Sun, Menu, X, Search, PanelLeftOpen, PanelLeftClose } from 'lucide-react';
+import { Moon, Sun, Menu, X, Search, PanelLeftOpen, PanelLeftClose, Home } from 'lucide-react';
 import { ThemeProvider, useTheme } from '@/components/theme-provider';
 import { CommandPalette } from '@/components/command-palette';
 import { MonoLogo } from '@/components/mono-logo';
 import { TOOLS, TOOL_CATEGORIES, type ToolId } from '@/lib/tools-registry';
 import JsonTool from '@/components/tools/json-tool';
-import JwtTool from '@/components/tools/jwt-tool';
 import Base64Tool from '@/components/tools/base64-tool';
 import UrlTool from '@/components/tools/url-tool';
 import TimestampTool from '@/components/tools/timestamp-tool';
-import UuidTool from '@/components/tools/uuid-tool';
 import ColorTool from '@/components/tools/color-tool';
 import DiffTool from '@/components/tools/diff-tool';
 import RegexTool from '@/components/tools/regex-tool';
@@ -25,17 +23,14 @@ import AppAssetTool from '@/components/tools/app-asset-tool';
 import CsvTool from '@/components/tools/csv-tool';
 import TypegenTool from '@/components/tools/typegen-tool';
 import CurlTool from '@/components/tools/curl-tool';
-import MockerTool from '@/components/tools/mocker-tool';
 import LogTool from '@/components/tools/log-tool';
-import StackTool from '@/components/tools/stack-tool';
+import { HomeDashboard } from '@/components/home-dashboard';
 
 const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   json: JsonTool,
-  jwt: JwtTool,
   base64: Base64Tool,
   url: UrlTool,
   timestamp: TimestampTool,
-  uuid: UuidTool,
   color: ColorTool,
   diff: DiffTool,
   regex: RegexTool,
@@ -47,9 +42,7 @@ const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   csv: CsvTool,
   typegen: TypegenTool,
   curl: CurlTool,
-  mocker: MockerTool,
   log: LogTool,
-  stack: StackTool,
 };
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -60,7 +53,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
 function AppShellInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const activeTool = (searchParams.get('tool') as ToolId) || 'json';
+  const requestedTool = searchParams.get('tool');
+  const isHome = requestedTool === null;
+  const activeTool: ToolId = requestedTool === 'mocker' ? 'typegen' : requestedTool === 'jwt' || requestedTool === 'uuid' ? 'base64' : requestedTool === 'stack' ? 'log' : (requestedTool as ToolId) || 'json';
   const { isDark, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -68,11 +63,16 @@ function AppShellInner() {
 
   const setTool = useCallback(
     (id: ToolId) => {
-      router.push(id === 'json' ? '/' : `/?tool=${id}`, { scroll: false });
+      router.push(`/?tool=${id}`, { scroll: false });
       setSidebarOpen(false);
     },
     [router]
   );
+
+  const goHome = useCallback(() => {
+    router.push('/', { scroll: false });
+    setSidebarOpen(false);
+  }, [router]);
 
   const current = TOOLS.find((t) => t.id === activeTool) ?? TOOLS[0];
   const ToolComponent = TOOL_COMPONENTS[current.id];
@@ -136,19 +136,21 @@ function AppShellInner() {
             railCollapsed ? 'justify-center px-2' : 'px-4 gap-3'
           }`}
         >
-          <div className="w-9 h-9 flex items-center justify-center shrink-0 rounded-xl bg-primary text-primary-foreground shadow-sm shadow-primary/25">
-            <MonoLogo className="w-[18px] h-[18px]" />
-          </div>
-          {!railCollapsed && (
-            <div className="min-w-0 flex-1 overflow-hidden">
-              <h1
-                className="text-[23px] font-bold tracking-tight text-sidebar-foreground leading-none"
-                style={{ fontFamily: 'var(--font-playfair), serif', fontStyle: 'italic' }}
-              >
-                mono
-              </h1>
+          <button onClick={goHome} className="flex min-w-0 items-center gap-3 text-left" title="Go to home">
+            <div className="w-9 h-9 flex items-center justify-center shrink-0 rounded-xl bg-primary text-primary-foreground shadow-sm shadow-primary/25">
+              <MonoLogo className="w-[18px] h-[18px]" />
             </div>
-          )}
+            {!railCollapsed && (
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <h1
+                  className="text-[23px] font-bold tracking-tight text-sidebar-foreground leading-none"
+                  style={{ fontFamily: 'var(--font-playfair), serif', fontStyle: 'italic' }}
+                >
+                  mono
+                </h1>
+              </div>
+            )}
+          </button>
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1.5 text-muted-foreground hover:bg-sidebar-accent rounded-lg"
@@ -185,6 +187,35 @@ function AppShellInner() {
 
         {/* Nav */}
         <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 ${railCollapsed ? 'px-2' : 'px-2.5'}`}>
+          <div className="mb-3">
+            <button
+              onClick={goHome}
+              title="Home"
+              className={`group relative flex w-full items-center rounded-xl text-left transition-all duration-150 ${
+                railCollapsed ? 'h-10 justify-center' : 'h-9 gap-2.5 px-2'
+              } ${
+                isHome
+                  ? 'bg-primary/12 text-sidebar-foreground shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_22%,transparent)]'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/80 hover:text-sidebar-foreground'
+              }`}
+            >
+              {isHome && (
+                <motion.span
+                  layoutId="active-rail"
+                  className="absolute left-0 top-1/2 h-[18px] w-[3px] -translate-y-1/2 rounded-full bg-primary"
+                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                />
+              )}
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                isHome
+                  ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                  : 'bg-transparent text-muted-foreground group-hover:bg-background/60 group-hover:text-foreground'
+              }`}>
+                <Home size={14} strokeWidth={isHome ? 2.25 : 1.85} />
+              </span>
+              {!railCollapsed && <span className={`truncate text-[13px] ${isHome ? 'font-semibold' : 'font-medium'}`}>Home</span>}
+            </button>
+          </div>
           {TOOL_CATEGORIES.map((cat, catIdx) => {
             const tools = TOOLS.filter((t) => t.category === cat.id);
             if (!tools.length) return null;
@@ -201,7 +232,7 @@ function AppShellInner() {
                 <div className="space-y-0.5">
                   {tools.map((tool) => {
                     const Icon = tool.icon;
-                    const isActive = current.id === tool.id;
+                    const isActive = !isHome && current.id === tool.id;
                     return (
                       <button
                         key={tool.id}
@@ -301,18 +332,18 @@ function AppShellInner() {
 
             <div className="flex items-center gap-3 min-w-0">
               <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15 shrink-0">
-                <CurrentIcon size={16} strokeWidth={2} />
+                {isHome ? <Home size={16} strokeWidth={2} /> : <CurrentIcon size={16} strokeWidth={2} />}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-[15px] font-semibold tracking-tight truncate leading-none">{current.label}</h2>
-                  {categoryLabel && (
+                  <h2 className="text-[15px] font-semibold tracking-tight truncate leading-none">{isHome ? 'Home' : current.label}</h2>
+                  {!isHome && categoryLabel && (
                     <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80 bg-secondary/70 px-1.5 py-0.5 rounded-md">
                       {categoryLabel}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground truncate mt-1 hidden sm:block">{current.description}</p>
+                <p className="text-xs text-muted-foreground truncate mt-1 hidden sm:block">{isHome ? 'A calm place for your work in progress' : current.description}</p>
               </div>
             </div>
           </div>
@@ -336,16 +367,16 @@ function AppShellInner() {
           </div>
         </header>
 
-        <main className="flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 w-full max-w-[1180px]">
+        <main className={isHome ? 'flex-1 w-full' : 'flex-1 w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8'}>
           <AnimatePresence mode="wait">
             <motion.div
-              key={current.id}
+              key={isHome ? 'home' : current.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             >
-              <ToolComponent />
+              {isHome ? <HomeDashboard /> : <ToolComponent />}
             </motion.div>
           </AnimatePresence>
         </main>

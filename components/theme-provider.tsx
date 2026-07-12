@@ -22,11 +22,13 @@ function applyTheme(isDark: boolean) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDark] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     setIsDark(prefersDark);
     applyTheme(prefersDark);
+    setHasMounted(true);
   }, []);
 
   const toggleTheme = () => {
@@ -38,7 +40,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ isDark, toggleTheme, cardShadow: getCardShadow(isDark) }}>
+    <ThemeContext.Provider value={{ isDark: hasMounted && isDark, toggleTheme, cardShadow: getCardShadow(hasMounted && isDark) }}>
       {children}
     </ThemeContext.Provider>
   );
