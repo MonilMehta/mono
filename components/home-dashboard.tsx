@@ -1,20 +1,88 @@
 'use client';
 
-import { AnimatePresence, motion, type PanInfo } from 'framer-motion';
-import { ArrowUp, Command, ImagePlus, Paperclip, Shredder, X } from 'lucide-react';
+import { animate, AnimatePresence, motion, type PanInfo, useMotionValue } from 'framer-motion';
+import { ArrowUp, Braces, Command, FileText, ImagePlus, Paperclip, PenTool, Terminal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
-type TodoRecord = {
+type ArtifactKind = 'note' | 'image' | 'json' | 'request' | 'svg';
+
+type ArtifactRecord = {
   id: string;
   text: string;
   createdAt: number;
   image?: Blob;
+  kind?: ArtifactKind;
 };
 
-type Todo = TodoRecord & { imageUrl?: string };
+type Artifact = ArtifactRecord & { imageUrl?: string };
+
+type StudioSample = {
+  id: string;
+  kind: ArtifactKind;
+  label: string;
+  meta: string;
+  text?: string;
+  image?: string;
+  imageAlt?: string;
+};
+
+type DragPreview = {
+  id: string;
+  kind: ArtifactKind;
+  label: string;
+  meta: string;
+  text?: string;
+  image?: string;
+  imageAlt?: string;
+  angle: number;
+};
 
 const DB_NAME = 'mono-home';
 const STORE_NAME = 'todos';
+const SETTLE_ANGLES = [-1.2, 0.8, -0.45, 1.05, -0.7, 0.4];
+const HANG_OFFSETS = [2, 8, 4, 10, 6, 0];
+
+const STUDIO_SAMPLES: StudioSample[] = [
+  {
+    id: 'sample-json',
+    kind: 'json',
+    label: 'JSON',
+    meta: '3.2 KB',
+    text: '{\n  "id": "usr_01H7X",\n  "name": "Monil Mehta",\n  "role": "Developer",\n  "status": "active"\n}',
+  },
+  {
+    id: 'sample-image',
+    kind: 'image',
+    label: 'Image',
+    meta: 'JPG',
+    image: '/studio-assets/landscape.jpg',
+    imageAlt: 'A grainy landscape of clouds and colorful rolling hills',
+  },
+  {
+    id: 'sample-request',
+    kind: 'request',
+    label: 'cURL',
+    meta: '1.1 KB',
+    text: "curl -X POST \\\nhttps://api.example.com/v1/auth \\\n-H 'Content-Type: application/json' \\\n-d '{\n  \"email\": \"hello@mono.dev\",\n  \"password\": \"••••••••\"\n}'",
+  },
+  {
+    id: 'sample-study',
+    kind: 'svg',
+    label: 'Interface study',
+    meta: 'Draft 04',
+    image: '/studio-assets/interface-study.jpg',
+    imageAlt: 'Architectural drawing of a responsive browser interface',
+  },
+  {
+    id: 'sample-material',
+    kind: 'image',
+    label: 'Material study',
+    meta: 'Ink proof',
+    image: '/studio-assets/material-study.jpg',
+    imageAlt: 'Risograph color-token print proof',
+  },
+];
 
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -29,61 +97,136 @@ function openDatabase() {
   });
 }
 
-async function readTodos(): Promise<TodoRecord[]> {
+async function readArtifacts(): Promise<ArtifactRecord[]> {
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
     const request = database.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll();
-    request.onsuccess = () => resolve(request.result as TodoRecord[]);
+    request.onsuccess = () => resolve(request.result as ArtifactRecord[]);
     request.onerror = () => reject(request.error);
   });
 }
 
-async function saveTodos(todos: TodoRecord[]) {
+async function saveArtifacts(artifacts: ArtifactRecord[]) {
   const database = await openDatabase();
   await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
     store.clear();
-    todos.forEach((todo) => store.put(todo));
+    artifacts.forEach((artifact) => store.put(artifact));
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
   });
 }
 
-function todoFromRecord(record: TodoRecord): Todo {
+function detectKind(text: string, hasImage: boolean): ArtifactKind {
+  if (hasImage) return 'image';
+  const value = text.trim();
+  if (/^curl\s/i.test(value)) return 'request';
+  if (/^<svg[\s>]/i.test(value)) return 'svg';
+  if (/^[{[]/.test(value)) {
+    try {
+      JSON.parse(value);
+      return 'json';
+    } catch {
+      return 'note';
+    }
+  }
+  return 'note';
+}
+
+function artifactFromRecord(record: ArtifactRecord): Artifact {
   return {
     ...record,
+    kind: record.kind ?? detectKind(record.text, Boolean(record.image)),
     imageUrl: record.image ? URL.createObjectURL(record.image) : undefined,
   };
 }
 
-function formatDate(timestamp: number) {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(timestamp);
+function formatArtifactText(artifact: Artifact) {
+  if (artifact.kind !== 'json') return artifact.text;
+  try {
+    return JSON.stringify(JSON.parse(artifact.text), null, 2);
+  } catch {
+    return artifact.text;
+  }
+}
+
+function KindMark({ kind }: { kind: ArtifactKind }) {
+  if (kind === 'json') return <Braces size={12} />;
+  if (kind === 'request') return <Terminal size={12} />;
+  if (kind === 'svg') return <PenTool size={12} />;
+  if (kind === 'image') return <ImagePlus size={12} />;
+  return <FileText size={12} />;
+}
+
+function StudioCard({
+  kind,
+  label,
+  meta,
+  text,
+  image,
+  imageAlt,
+}: {
+  kind: ArtifactKind;
+  label: string;
+  meta: string;
+  text?: string;
+  image?: string;
+  imageAlt?: string;
+}) {
+  return (
+    <article className={`studio-card studio-card-${kind} group relative flex h-[306px] flex-col`}>
+      <div className="flex h-12 shrink-0 items-center justify-between gap-3 px-4">
+        <div className="flex min-w-0 items-center gap-2 font-mono text-[9px] uppercase tracking-[0.08em] text-foreground/80">
+          <span className="studio-card-dot" />
+          <KindMark kind={kind} />
+          <span className="sr-only">{label}</span>
+        </div>
+        <span className="shrink-0 font-mono text-[8px] uppercase tracking-[0.08em] text-foreground/65">{meta}</span>
+      </div>
+
+      {image ? (
+        <figure className="flex min-h-0 flex-1 flex-col p-3">
+          <img draggable={false} src={image} alt={imageAlt ?? label} className="min-h-0 flex-1 border border-foreground/10 bg-[#e9e2d6] object-cover" />
+          <figcaption className="sr-only">{imageAlt ?? label}</figcaption>
+        </figure>
+      ) : kind === 'note' ? (
+        <p className="px-5 py-6 font-serif text-[21px] leading-[1.38] tracking-[-0.018em] text-foreground">{text}</p>
+      ) : (
+        <pre className="min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words px-4 py-5 font-mono text-[9px] leading-[1.75] text-foreground/85">{text}</pre>
+      )}
+    </article>
+  );
 }
 
 export function HomeDashboard() {
-  const [todos, setTodos] = useState<Todo[]>([]);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [draft, setDraft] = useState('');
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [pendingImageUrl, setPendingImageUrl] = useState<string>();
   const [isReady, setIsReady] = useState(false);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [shreddingId, setShreddingId] = useState<string | null>(null);
-  const [isOverShredder, setIsOverShredder] = useState(false);
+  const [discardingId, setDiscardingId] = useState<string>();
+  const [draggingId, setDraggingId] = useState<string>();
+  const [dragAtShredder, setDragAtShredder] = useState(false);
+  const [dragPreview, setDragPreview] = useState<DragPreview>();
+  const [hiddenSampleIds, setHiddenSampleIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shredderRef = useRef<HTMLDivElement>(null);
+  const dragProxyRefs = useRef(new Map<string, HTMLDivElement>());
+  const dragOriginRef = useRef({ x: 0, y: 0 });
+  const dragOffsetRef = useRef({ x: 125, y: 153 });
+  const previewX = useMotionValue(0);
+  const previewY = useMotionValue(0);
   const imageUrlsRef = useRef<string[]>([]);
 
   useEffect(() => {
-    readTodos()
+    readArtifacts()
       .then((records) => {
-        const restored = records.sort((a, b) => b.createdAt - a.createdAt).map(todoFromRecord);
-        imageUrlsRef.current = restored.flatMap((todo) => (todo.imageUrl ? [todo.imageUrl] : []));
-        setTodos(restored);
+        const restored = records.sort((a, b) => b.createdAt - a.createdAt).map(artifactFromRecord);
+        imageUrlsRef.current = restored.flatMap((artifact) => (artifact.imageUrl ? [artifact.imageUrl] : []));
+        setArtifacts(restored);
       })
-      .catch(() => {
-        // The screen remains usable if private browsing blocks IndexedDB.
-      })
+      .catch(() => undefined)
       .finally(() => setIsReady(true));
 
     return () => imageUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
@@ -91,10 +234,8 @@ export function HomeDashboard() {
 
   useEffect(() => {
     if (!isReady) return;
-    void saveTodos(todos.map(({ imageUrl: _imageUrl, ...todo }) => todo)).catch(() => {
-      // Keep the current session available even if the browser storage quota is full.
-    });
-  }, [todos, isReady]);
+    void saveArtifacts(artifacts.map(({ imageUrl: _imageUrl, ...artifact }) => artifact)).catch(() => undefined);
+  }, [artifacts, isReady]);
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
@@ -120,19 +261,20 @@ export function HomeDashboard() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function addTodo() {
+  function addArtifact() {
     const text = draft.trim();
     if (!text && !pendingImage) return;
 
     const imageUrl = pendingImage ? URL.createObjectURL(pendingImage) : undefined;
     if (imageUrl) imageUrlsRef.current.push(imageUrl);
-    setTodos((current) => [
+    setArtifacts((current) => [
       {
         id: crypto.randomUUID(),
-        text: text || 'Untitled bug',
+        text: text || 'Untitled reference',
         createdAt: Date.now(),
         image: pendingImage ?? undefined,
         imageUrl,
+        kind: detectKind(text, Boolean(pendingImage)),
       },
       ...current,
     ]);
@@ -142,236 +284,363 @@ export function HomeDashboard() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function isPointOverShredder(point: PanInfo['point']) {
-    const bounds = shredderRef.current?.getBoundingClientRect();
-    return Boolean(
-      bounds &&
-      point.x >= bounds.left - 28 &&
-      point.x <= bounds.right + 28 &&
-      point.y >= bounds.top - 44 &&
-      point.y <= bounds.bottom + 28
-    );
-  }
+  function removeArtifact(id: string, isUserArtifact = true) {
+    if (!isUserArtifact) {
+      setHiddenSampleIds((current) => current.includes(id) ? current : [...current, id]);
+      setDiscardingId(undefined);
+      setDraggingId(undefined);
+      setDragAtShredder(false);
+      setDragPreview(undefined);
+      return;
+    }
 
-  function finishDrag(id: string, info: PanInfo) {
-    setDraggingId(null);
-    setIsOverShredder(false);
-    if (isPointOverShredder(info.point)) setShreddingId(id);
-  }
-
-  function removeTodo(id: string) {
-    setTodos((current) => {
-      const removed = current.find((todo) => todo.id === id);
+    setArtifacts((current) => {
+      const removed = current.find((artifact) => artifact.id === id);
       if (removed?.imageUrl) {
         URL.revokeObjectURL(removed.imageUrl);
         imageUrlsRef.current = imageUrlsRef.current.filter((url) => url !== removed.imageUrl);
       }
-      return current.filter((todo) => todo.id !== id);
+      return current.filter((artifact) => artifact.id !== id);
     });
-    setShreddingId(null);
+    setDiscardingId(undefined);
+    setDraggingId(undefined);
+    setDragAtShredder(false);
+    setDragPreview(undefined);
   }
 
-  const shredderActive = draggingId !== null && isOverShredder;
-  const shreddingTodo = todos.find((todo) => todo.id === shreddingId);
-  const clotheslineWidth = Math.max(320, todos.length * 240);
-  const shredStripCount = 10;
+  function getPreviewPosition(point: PanInfo['point']) {
+    return {
+      x: Math.min(Math.max(point.x - dragOffsetRef.current.x, 8), window.innerWidth - 258),
+      y: Math.min(Math.max(point.y - dragOffsetRef.current.y, 8), window.innerHeight - 314),
+    };
+  }
 
+  function isNearShredder(point: PanInfo['point']) {
+    const bounds = shredderRef.current?.getBoundingClientRect();
+    return Boolean(
+      bounds &&
+      point.x >= bounds.left - 92 &&
+      point.x <= bounds.right + 64 &&
+      point.y >= bounds.top - 132 &&
+      point.y <= bounds.bottom + 32
+    );
+  }
+
+  function updateDrag(id: string, info: PanInfo) {
+    const position = getPreviewPosition(info.point);
+    previewX.set(position.x);
+    previewY.set(position.y);
+    const near = isNearShredder(info.point);
+    setDragAtShredder((current) => current === near ? current : near);
+  }
+
+  function finishDrag(id: string, info: PanInfo) {
+    const shouldDiscard = isNearShredder(info.point);
+    if (shouldDiscard) {
+      setDragAtShredder(true);
+      setDiscardingId(id);
+      return;
+    }
+
+    setDragAtShredder(false);
+    void Promise.all([
+      animate(previewX, dragOriginRef.current.x, { duration: 0.36, ease: [0.22, 1, 0.36, 1] }),
+      animate(previewY, dragOriginRef.current.y, { duration: 0.36, ease: [0.22, 1, 0.36, 1] }),
+    ]).then(() => {
+      setDraggingId(undefined);
+      setDragPreview(undefined);
+    });
+  }
+
+  const wallItems = [...artifacts, ...STUDIO_SAMPLES.filter((sample) => !hiddenSampleIds.includes(sample.id))];
+  const wallWidth = Math.max(1220, wallItems.length * 276 + 96);
   return (
-    <section className="relative min-h-[calc(100dvh-60px)] overflow-visible px-5 pb-44 pt-7 sm:px-10 sm:pt-10 lg:px-14">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">Todo clothesline</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">Hold on to the loose ends.</h1>
-        </div>
-        <p className="rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm backdrop-blur-sm">{todos.length} {todos.length === 1 ? 'thing' : 'things'} hanging</p>
-      </div>
+    <section className="studio-room relative min-h-dvh overflow-hidden pb-16">
+      <img aria-hidden="true" src="/studio-assets/landscape.jpg" className="studio-landscape" style={{ height: 'calc(100% - 185px)' }} />
 
-      <div className="mx-auto mt-7 w-full max-w-[680px]">
-        <div className="rounded-[26px] border border-border/70 bg-card/92 p-2 shadow-[0_18px_55px_-28px_color-mix(in_oklch,var(--foreground)_55%,transparent)] backdrop-blur-xl">
-          {pendingImageUrl && (
-            <div className="relative ml-2 mt-2 w-fit">
-              <img src={pendingImageUrl} alt="New bug attachment preview" className="max-h-28 max-w-40 rounded-xl object-contain" />
-              <button onClick={clearAttachment} className="absolute -right-2 -top-2 rounded-full bg-foreground p-1 text-background shadow-sm" aria-label="Remove attachment">
-                <X size={12} />
+      <div className="relative z-[2] mx-auto w-full max-w-[1320px] px-6 pb-3 pt-14 sm:px-10 lg:pt-20">
+        <div className="grid items-center gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:gap-14">
+          <header className="max-w-[470px] pt-8 lg:pt-12">
+            <h1 className="font-serif text-[49px] font-medium leading-[0.98] tracking-[-0.052em] text-foreground sm:text-[66px] lg:text-[72px]">
+              Hold on to<br />
+              the <em className="font-normal text-[#174c9c]">loose</em> ends.
+            </h1>
+          </header>
+
+          <div className="capture-desk lg:mt-16">
+            {pendingImageUrl && (
+              <div className="relative mb-4 w-fit">
+                <img src={pendingImageUrl} alt="New artifact preview" className="max-h-24 max-w-44 border border-border bg-card object-contain p-1" />
+                <button onClick={clearAttachment} className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground" aria-label="Remove attachment">
+                  <X size={11} />
+                </button>
+              </div>
+            )}
+
+            <label htmlFor="capture-draft" className="sr-only">Pin a reference</label>
+            <textarea
+              id="capture-draft"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') addArtifact();
+              }}
+              placeholder={'Add a thought\nor attach a screenshot…'}
+              rows={3}
+              className="min-h-[92px] w-full resize-none bg-transparent font-mono text-[14px] leading-8 outline-none placeholder:text-foreground/58"
+            />
+
+            <div className="flex items-center justify-between gap-4 border-t border-foreground/10 pt-4">
+              <div className="flex items-center gap-4">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) setAttachment(file);
+                  }}
+                />
+                <button onClick={() => fileInputRef.current?.click()} className="inline-flex h-8 items-center gap-2 font-mono text-[9px] text-foreground/72 transition-colors hover:text-foreground">
+                  {pendingImage ? <Paperclip size={13} /> : <ImagePlus size={13} />}
+                  Attach image
+                </button>
+                <span className="hidden h-5 w-px bg-foreground/10 sm:block" />
+                <span className="hidden items-center gap-1.5 font-mono text-[8px] text-foreground/55 sm:flex"><Command size={10} /> + Enter to pin</span>
+              </div>
+              <button
+                onClick={addArtifact}
+                disabled={!draft.trim() && !pendingImage}
+                className="pin-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-[transform,opacity] hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
+                aria-label="Pin to wall"
+              >
+                <ArrowUp size={18} />
               </button>
             </div>
-          )}
-          <label htmlFor="todo-draft" className="sr-only">New to-do</label>
-          <textarea
-            id="todo-draft"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') addTodo();
-            }}
-            placeholder="Add a thought or attach a bug screenshot…"
-            rows={2}
-            className="min-h-[64px] w-full resize-none bg-transparent px-3 pt-3 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/65"
-          />
-          <div className="flex items-center justify-between gap-3 px-1 pb-1">
-            <div className="flex items-center gap-1">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="sr-only"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) setAttachment(file);
-                }}
-              />
-              <button onClick={() => fileInputRef.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
-                {pendingImage ? <Paperclip size={14} /> : <ImagePlus size={14} />}
-                <span className="hidden sm:inline">Attach image</span>
-              </button>
-              <span className="hidden items-center gap-1 text-[11px] text-muted-foreground sm:flex"><Command size={11} />↵ to pin</span>
-            </div>
-            <button onClick={addTodo} disabled={!draft.trim() && !pendingImage} className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm shadow-primary/25 transition-all hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Pin to clothesline">
-              <ArrowUp size={16} />
-            </button>
           </div>
         </div>
       </div>
 
-      <div className="mt-11 overflow-visible pb-8">
-        <div className="relative z-0 min-h-[370px] min-w-full" style={{ width: clotheslineWidth }}>
-          <svg aria-hidden="true" viewBox="0 0 1000 120" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 top-0 h-[120px] w-full overflow-visible">
-            <path d="M 0 22 Q 500 128 1000 22" fill="none" stroke="var(--foreground)" strokeOpacity="0.16" strokeWidth="7" strokeLinecap="round" />
-            <path d="M 0 22 Q 500 128 1000 22" fill="none" stroke="var(--foreground)" strokeOpacity="0.78" strokeWidth="3" strokeLinecap="round" />
-            <path d="M 0 22 Q 500 128 1000 22" fill="none" stroke="var(--background)" strokeOpacity="0.7" strokeWidth="0.85" strokeDasharray="2 6" strokeLinecap="round" />
-            <path d="M 0 19 Q 500 121 1000 19" fill="none" stroke="var(--accent)" strokeOpacity="0.48" strokeWidth="1.1" strokeLinecap="round" />
-            <circle cx="2" cy="21" r="7" fill="var(--foreground)" fillOpacity="0.82" />
-            <circle cx="2" cy="21" r="2" fill="var(--accent)" />
-            <circle cx="998" cy="21" r="7" fill="var(--foreground)" fillOpacity="0.82" />
-            <circle cx="998" cy="21" r="2" fill="var(--accent)" />
-          </svg>
+      <div className="relative z-[3] mt-14 overflow-x-auto overflow-y-hidden pb-16 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mt-12">
+        <div className="clothesline-track relative min-h-[440px]" style={{ width: wallWidth }}>
+          <div className="clothesline-cord absolute left-0 right-0 top-[34px]" />
 
-          {todos.length > 0 ? (
-            <div className="relative z-10 flex min-w-full justify-around gap-10 px-10 sm:px-16">
-              {todos.map((todo, index) => {
-                const position = (index + 0.5) / todos.length;
-                const ropeY = 34 + 54 * 4 * position * (1 - position);
-                const isShredding = shreddingId === todo.id;
+          <AnimatePresence mode="popLayout">
+            <div className="relative z-10 flex gap-[26px] px-12">
+              {wallItems.map((item, index) => {
+                const offset = HANG_OFFSETS[index % HANG_OFFSETS.length];
+                const angle = SETTLE_ANGLES[index % SETTLE_ANGLES.length];
+                const isUserArtifact = 'createdAt' in item;
+                const kind = item.kind ?? 'note';
+                const label = isUserArtifact ? kind : item.label;
+                const meta = isUserArtifact ? 'Just now' : item.meta;
+                const text = isUserArtifact ? formatArtifactText(item) : item.text;
+                const image = isUserArtifact ? item.imageUrl : item.image;
+                const imageAlt = isUserArtifact ? item.text : item.imageAlt;
+
                 return (
-                  <div key={todo.id} className="shrink-0" style={{ paddingTop: ropeY + 28 }}>
-                    <motion.article
+                  <div key={item.id} className="relative w-[250px] shrink-0" style={{ paddingTop: 40 + offset }}>
+                    <div aria-hidden="true" className="binder-clip absolute left-1/2 z-20 -translate-x-1/2" style={{ top: 20 + offset }}>
+                      <span className="binder-handle binder-handle-back" />
+                      <span className="binder-handle binder-handle-front" />
+                    </div>
+                    <motion.div
                       layout
-                      drag={isShredding ? false : true}
-                      dragSnapToOrigin
-                      dragElastic={0.08}
-                      dragMomentum={false}
-                      whileDrag={{ scale: 1.025, rotate: 0, cursor: 'grabbing' }}
-                      onDragStart={() => setDraggingId(todo.id)}
-                      onDrag={(_, info) => setIsOverShredder(isPointOverShredder(info.point))}
-                      onDragEnd={(_, info) => finishDrag(todo.id, info)}
-                      initial={{ opacity: 0, scale: 0.96 }}
-                      animate={isShredding ? { opacity: 0, scale: 0.96 } : { opacity: 1, scale: 1, rotate: index % 2 ? 0.8 : -0.8 }}
-                      transition={isShredding ? { duration: 0.12, ease: 'easeOut' } : { type: 'spring', stiffness: 320, damping: 26 }}
-                      className="relative cursor-grab touch-none transition-[filter] hover:drop-shadow-[0_16px_16px_color-mix(in_oklch,var(--foreground)_16%,transparent)]"
-                      style={{ zIndex: draggingId === todo.id ? 60 : 20, touchAction: 'none' }}
+                      initial={isUserArtifact ? { opacity: 0, y: -10, rotate: angle * 2 } : false}
+                      animate={discardingId === item.id
+                        ? { opacity: 0 }
+                        : { opacity: draggingId === item.id ? 0 : 1, y: 0, rotate: angle }}
+                      exit={{ opacity: 0, y: 12, rotate: angle * 1.4 }}
+                      transition={discardingId === item.id
+                        ? { duration: 0.12, ease: 'easeOut' }
+                        : { duration: 0 }}
+                      className="pointer-events-none relative z-20 w-[250px]"
+                      style={{ transformOrigin: '50% 0' }}
                     >
-                      <span className="absolute -top-[28px] left-1/2 h-[28px] w-[2px] -translate-x-1/2 bg-foreground/35 shadow-[0_0_0_1px_color-mix(in_oklch,var(--background)_35%,transparent)]" />
-                      <span className="absolute -top-[22px] left-1/2 z-10 h-9 w-[18px] -translate-x-1/2 rounded-[5px] border border-foreground/20 bg-[linear-gradient(90deg,color-mix(in_oklch,var(--accent)_76%,white),var(--accent)_62%,color-mix(in_oklch,var(--accent)_70%,black))] shadow-[0_5px_9px_-5px_color-mix(in_oklch,var(--foreground)_80%,transparent)]">
-                        <span className="absolute inset-y-1 left-[3px] w-[5px] rounded-sm border border-foreground/10 bg-white/20" />
-                        <span className="absolute inset-y-1 right-[3px] w-[5px] rounded-sm border border-foreground/10 bg-black/10" />
-                        <span className="absolute left-1/2 top-[13px] h-[5px] w-[5px] -translate-x-1/2 rounded-full border border-foreground/35 bg-foreground/45 shadow-[0_1px_1px_rgba(0,0,0,0.25)]" />
-                      </span>
-                      {todo.imageUrl ? (
-                        <figure className="max-w-[70vw] rounded-[10px] border border-foreground/10 bg-card p-1.5 shadow-[0_18px_32px_-22px_color-mix(in_oklch,var(--foreground)_55%,transparent)] sm:max-w-[360px]">
-                          <img draggable={false} src={todo.imageUrl} alt={`Attachment for ${todo.text}`} className="max-h-[260px] w-auto rounded-[6px] object-contain" />
-                          {todo.text !== 'Untitled bug' && <figcaption className="mt-2 max-w-[300px] text-sm font-medium leading-5 text-foreground">{todo.text}</figcaption>}
-                          <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.13em] text-muted-foreground">{formatDate(todo.createdAt)} · pull to shred</p>
-                        </figure>
-                      ) : (
-                        <div className="relative w-[230px] overflow-hidden rounded-[4px] border border-foreground/10 bg-[linear-gradient(135deg,color-mix(in_oklch,var(--accent)_25%,var(--card)),var(--card))] px-5 py-5 shadow-[0_18px_35px_-22px_color-mix(in_oklch,var(--foreground)_55%,transparent)] ring-1 ring-foreground/5">
-                          <span aria-hidden="true" className="absolute right-0 top-0 h-6 w-6 border-b border-l border-foreground/10 bg-background/35 [clip-path:polygon(0_0,100%_100%,100%_0)]" />
-                          <p className="text-[15px] font-medium leading-6">{todo.text}</p>
-                          <p className="mt-5 text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">{formatDate(todo.createdAt)}</p>
-                        </div>
-                      )}
-                    </motion.article>
+                      <StudioCard
+                        kind={kind}
+                        label={label}
+                        meta={meta}
+                        text={text}
+                        image={image}
+                        imageAlt={imageAlt}
+                      />
+                    </motion.div>
+                    <motion.div
+                      ref={(element) => {
+                        if (element) dragProxyRefs.current.set(item.id, element);
+                        else dragProxyRefs.current.delete(item.id);
+                      }}
+                      aria-hidden="true"
+                      drag
+                      dragSnapToOrigin
+                      dragMomentum={false}
+                      dragElastic={0.04}
+                      onDragStart={(_event, info) => {
+                        const bounds = dragProxyRefs.current.get(item.id)?.getBoundingClientRect();
+                        if (!bounds) return;
+                        dragOffsetRef.current = { x: info.point.x - bounds.left, y: info.point.y - bounds.top };
+                        const position = { x: bounds.left, y: bounds.top };
+                        setDraggingId(item.id);
+                        setDragAtShredder(false);
+                        dragOriginRef.current = position;
+                        previewX.set(position.x);
+                        previewY.set(position.y);
+                        setDragPreview({ id: item.id, kind, label, meta, text, image, imageAlt, angle });
+                      }}
+                      onDrag={(_event, info) => updateDrag(item.id, info)}
+                      onDragEnd={(_event, info) => finishDrag(item.id, info)}
+                      className="absolute left-0 z-10 h-[306px] w-[250px] cursor-grab touch-none active:cursor-grabbing"
+                      style={{ top: 40 + offset }}
+                    />
                   </div>
                 );
               })}
             </div>
-          ) : isReady ? (
-            <div className="absolute left-1/2 top-[145px] -translate-x-1/2 whitespace-nowrap text-center">
-              <p className="text-sm font-medium text-muted-foreground">Pin a thought, a bug, or a screenshot to the line.</p>
-            </div>
-          ) : null}
+          </AnimatePresence>
         </div>
       </div>
 
-      <div ref={shredderRef} className={`absolute inset-x-5 bottom-5 z-30 flex h-[124px] items-center justify-center rounded-[32px] border-2 border-dashed transition-all duration-200 sm:inset-x-10 lg:inset-x-14 ${shredderActive ? 'scale-[1.01] border-destructive/60 bg-destructive/10 text-destructive' : 'border-border/80 bg-card/35 text-muted-foreground'}`}>
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-foreground/[0.06]"><Shredder size={23} /></div>
-          <div>
-            <p className="text-sm font-semibold">{shredderActive ? 'Let go to shred it' : 'Finished with something?'}</p>
-            <p className="mt-0.5 text-xs opacity-75">Drag it into the shredder</p>
-          </div>
-        </div>
-      </div>
+      {dragPreview && !discardingId && createPortal(
+        <motion.div
+          key={dragPreview.id}
+          initial={false}
+          animate={dragAtShredder ? {
+            scaleX: 0.72,
+            scaleY: 0.72,
+            rotate: 0,
+            opacity: 1,
+          } : {
+            scaleX: 1,
+            scaleY: 1,
+            rotate: dragPreview.angle,
+            opacity: 1,
+          }}
+          transition={{ duration: dragAtShredder ? 0.16 : 0.08, ease: [0.22, 1, 0.36, 1] }}
+          className={dragAtShredder ? 'shredding-sheet' : ''}
+          style={{ position: 'fixed', left: 0, top: 0, x: previewX, y: previewY, zIndex: 1000, width: 250, pointerEvents: 'none', transformOrigin: '50% 50%' }}
+        >
+          <StudioCard
+            kind={dragPreview.kind}
+            label={dragPreview.label}
+            meta={dragPreview.meta}
+            text={dragPreview.text}
+            image={dragPreview.image}
+            imageAlt={dragPreview.imageAlt}
+          />
+        </motion.div>,
+        document.body
+      )}
 
-      <AnimatePresence>
-        {shreddingTodo && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center bg-background/40 px-5 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.86, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, opacity: 0 }} transition={{ type: 'spring', stiffness: 280, damping: 25 }} className="relative h-[380px] w-[min(92vw,560px)]">
-              <motion.div
-                initial={{ y: -32, opacity: 0, scale: 0.9 }}
-                animate={{ y: [-32, -26, 44, 198], opacity: [0, 1, 1, 0], scale: [0.9, 0.95, 0.95, 0.9] }}
-                transition={{ duration: 1.48, times: [0, 0.11, 0.33, 0.53], ease: [0.4, 0, 0.8, 1] }}
-                onAnimationComplete={() => removeTodo(shreddingTodo.id)}
-                className="absolute bottom-[126px] left-1/2 z-0 h-[166px] w-[250px] -translate-x-1/2 overflow-hidden rounded-t-xl border border-border/80 bg-card shadow-2xl"
-              >
-                {shreddingTodo.imageUrl && <img src={shreddingTodo.imageUrl} alt="" className="h-20 w-full border-b border-border/60 object-cover" />}
-                <div className="p-4">
-                  <p className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">{shreddingTodo.text}</p>
-                  <div className="mt-4 h-2 w-3/4 rounded-full bg-muted" />
-                  <div className="mt-2 h-2 w-1/2 rounded-full bg-muted" />
-                </div>
-              </motion.div>
+      {dragPreview && discardingId === dragPreview.id && createPortal(
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-[#e9e2d7]/75 px-5 backdrop-blur-[5px]"
+        >
+          <motion.div
+            initial={{ scale: 0.94, y: 12 }}
+            animate={{ scale: 1, y: 0 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="relative h-[470px] w-[min(92vw,590px)]"
+          >
+            <motion.div
+              initial={{ y: -62, opacity: 0, scale: 0.78, rotate: dragPreview.angle }}
+              animate={{ y: [-62, -28, 92, 224], opacity: [0, 1, 1, 0], scale: [0.78, 0.78, 0.76, 0.7], rotate: [dragPreview.angle, 0, 0, 0] }}
+              transition={{ duration: 1.62, times: [0, 0.1, 0.5, 0.7], ease: [0.4, 0, 0.75, 1] }}
+              onAnimationComplete={() => removeArtifact(dragPreview.id, artifacts.some((artifact) => artifact.id === dragPreview.id))}
+              className="absolute left-1/2 top-0 z-0 w-[250px] -translate-x-1/2 origin-top"
+            >
+              <StudioCard {...dragPreview} />
+            </motion.div>
 
-              <motion.div animate={{ x: [0, -2, 2, -1, 1, 0] }} transition={{ delay: 0.38, duration: 0.46 }} className="absolute bottom-[58px] z-10 h-[136px] w-full overflow-visible">
-                <div className="absolute inset-x-0 top-0 h-12 rounded-t-[28px] border border-primary/35 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--primary)_26%,var(--card)),var(--card))] shadow-[0_18px_30px_-24px_color-mix(in_oklch,var(--foreground)_65%,transparent)]" />
-                <div className="absolute left-1/2 top-[22px] h-3 w-[290px] -translate-x-1/2 rounded-full bg-foreground shadow-[inset_0_2px_2px_rgba(0,0,0,0.6)]" />
-                <div className="absolute left-1/2 top-[33px] flex w-[280px] -translate-x-1/2 justify-center gap-1">
-                  {Array.from({ length: 18 }, (_, tooth) => <span key={tooth} className="h-2 w-2 rotate-45 bg-foreground/75" />)}
-                </div>
-                <div className="absolute inset-x-0 bottom-0 h-[102px] rounded-b-[28px] border border-primary/25 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--primary)_12%,var(--card)),var(--card))] shadow-2xl">
-                  <div className="absolute left-1/2 top-5 h-2 w-[230px] -translate-x-1/2 rounded-full bg-foreground/65" />
-                  <div className="absolute inset-x-0 bottom-5 flex items-center justify-center gap-3">
-                    <div className="flex h-11 w-12 items-center justify-center rounded-2xl bg-foreground/[0.08]"><Shredder size={22} /></div>
-                    <div><p className="text-base font-semibold">Shredding</p><p className="text-xs text-muted-foreground">Cutting it into strips</p></div>
-                    <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-accent" />
-                  </div>
-                </div>
-              </motion.div>
-
-              <div className="pointer-events-none absolute bottom-0 left-1/2 z-0 h-[120px] w-[250px] -translate-x-1/2 overflow-visible">
-                {Array.from({ length: shredStripCount }, (_, strip) => (
-                  <motion.div
-                    key={strip}
-                    initial={{ y: -116, opacity: 0, rotate: 0 }}
-                    animate={{ y: [-116, -42, 54, 142], opacity: [0, 1, 1, 0], rotate: [0, strip % 2 ? -1.5 : 1.5, strip % 2 ? -4 : 4, strip % 2 ? -8 : 8] }}
-                    transition={{ duration: 0.9, delay: 0.43 + strip * 0.018, times: [0, 0.18, 0.7, 1], ease: 'easeIn' }}
-                    className="absolute top-0 h-[154px] overflow-hidden border-x border-border/30 bg-card shadow-sm"
-                    style={{ left: `${(strip / shredStripCount) * 100}%`, width: `${100 / shredStripCount}%` }}
-                  >
-                    <div className="absolute top-0 h-[166px] w-[250px] bg-card" style={{ left: `-${strip * (250 / shredStripCount)}px` }}>
-                      {shreddingTodo.imageUrl && <img src={shreddingTodo.imageUrl} alt="" className="h-20 w-full border-b border-border/60 object-cover" />}
-                      <div className="p-4">
-                        <p className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">{shreddingTodo.text}</p>
-                        <div className="mt-4 h-2 w-3/4 rounded-full bg-muted" />
-                        <div className="mt-2 h-2 w-1/2 rounded-full bg-muted" />
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
+            <motion.div
+              animate={{ x: [0, -2, 2, -1, 1, 0] }}
+              transition={{ delay: 0.72, duration: 0.48 }}
+              className="absolute inset-x-0 top-[238px] z-20 h-[142px]"
+            >
+              <div className="absolute inset-x-0 top-0 h-14 rounded-t-[26px] border border-[#183047]/25 bg-[#233c54] shadow-[0_18px_32px_-22px_rgba(20,31,42,0.65)]" />
+              <div className="absolute left-1/2 top-[22px] h-3 w-[300px] -translate-x-1/2 rounded-full bg-[#07131e] shadow-[inset_0_2px_3px_rgba(0,0,0,0.7)]" />
+              <div className="absolute left-1/2 top-[34px] flex w-[286px] -translate-x-1/2 justify-center gap-[5px]">
+                {Array.from({ length: 20 }, (_, tooth) => <span key={tooth} className="h-[9px] w-[9px] rotate-45 bg-[#102536]" />)}
+              </div>
+              <div className="absolute inset-x-0 bottom-0 h-[96px] rounded-b-[26px] border border-[#183047]/20 bg-[#eee7dc] shadow-[0_22px_38px_-24px_rgba(20,31,42,0.65)]">
+                <div className="absolute left-1/2 top-5 h-2 w-[242px] -translate-x-1/2 rounded-full bg-[#183047]/70" />
+                <div className="absolute inset-x-0 bottom-5 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#183047]/70">shredding reference</div>
               </div>
             </motion.div>
+
+            <div className="pointer-events-none absolute left-1/2 top-[276px] z-10 h-[190px] w-[250px] -translate-x-1/2 overflow-visible">
+              {Array.from({ length: 12 }, (_, strip) => (
+                <motion.div
+                  key={strip}
+                  initial={{ y: -90, opacity: 0, rotate: 0 }}
+                  animate={{ y: [-90, -28, 72, 184], opacity: [0, 1, 1, 0], rotate: [0, strip % 2 ? -2 : 2, strip % 2 ? -5 : 5, strip % 2 ? -10 : 10] }}
+                  transition={{ duration: 1.02, delay: 0.76 + strip * 0.018, times: [0, 0.2, 0.72, 1], ease: 'easeIn' }}
+                  className="absolute top-0 h-[184px] overflow-hidden border-x border-[#463923]/15 bg-[#f5f0e7] shadow-sm"
+                  style={{ left: `${(strip / 12) * 100}%`, width: `${100 / 12}%` }}
+                >
+                  <div className="absolute top-0 h-[306px] w-[250px]" style={{ left: `-${strip * (250 / 12)}px` }}>
+                    <StudioCard {...dragPreview} />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>,
+        document.body
+      )}
+
+      {isReady && createPortal(
+        <div
+          ref={shredderRef}
+          aria-hidden="true"
+          className={`studio-shredder ${discardingId || (draggingId && dragAtShredder) ? 'is-active' : ''}`}
+          style={{ position: 'fixed', right: 78, bottom: 24, zIndex: 50, width: 84, height: 88, pointerEvents: 'none' }}
+        >
+          <span
+            className="studio-shredder-label"
+            style={{ position: 'absolute', top: 0, left: 0, width: '100%', color: '#183047', fontFamily: 'var(--font-geist-mono), monospace', fontSize: 7, letterSpacing: '0.12em', textAlign: 'center', textTransform: 'uppercase' }}
+          >
+            shred
+          </span>
+          <AnimatePresence>
+            {discardingId && (
+              <motion.span
+                key={discardingId}
+                initial={{ y: -34, scaleX: 0.82, scaleY: 1, opacity: 0 }}
+                animate={{ y: [-34, -11, 10], scaleX: [0.82, 0.64, 0.5], scaleY: [1, 0.58, 0.08], opacity: [0, 1, 0] }}
+                transition={{ duration: 0.54, times: [0, 0.44, 1], ease: [0.4, 0, 0.2, 1] }}
+                style={{ position: 'absolute', top: 24, left: 25, zIndex: 2, width: 34, height: 34, border: '1px solid rgba(24, 48, 71, 0.22)', background: '#f7f0e5', boxShadow: 'inset 3px -3px 5px rgba(61, 48, 34, 0.16)' }}
+              />
+            )}
+          </AnimatePresence>
+          <span className="studio-shredder-head" style={{ position: 'absolute', top: 16, left: 0, zIndex: 4, width: 84, height: 24, borderRadius: 3, background: '#183047' }}>
+            <span className="studio-shredder-slot" />
+            <span className="studio-shredder-light" />
+          </span>
+          <span className="studio-shredder-body">
+            {discardingId && Array.from({ length: 11 }, (_, index) => (
+              <motion.span
+                key={index}
+                initial={{ y: -8, height: 0, opacity: 0 }}
+                animate={{
+                  y: [-8, 2, 34],
+                  x: [0, index % 2 === 0 ? -1 : 1, index % 3 === 0 ? -5 : 4],
+                  height: [0, 24 + (index % 4) * 3, 30],
+                  rotate: [0, index % 2 === 0 ? -2 : 2, index % 2 === 0 ? -8 : 7],
+                  opacity: [0, 1, 0],
+                }}
+                transition={{ duration: 0.68, delay: 0.5 + index * 0.018, times: [0, 0.28, 1], ease: [0.4, 0, 0.2, 1] }}
+                style={{ left: 5 + index * 5.4 }}
+              />
+            ))}
+          </span>
+        </div>,
+        document.body
+      )}
     </section>
   );
 }

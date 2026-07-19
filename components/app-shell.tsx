@@ -3,11 +3,11 @@
 import { Suspense, useCallback, useEffect, useState, type ComponentType } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Moon, Sun, Menu, X, Search, PanelLeftOpen, PanelLeftClose, Home } from 'lucide-react';
+import { Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, X, Home } from 'lucide-react';
 import { ThemeProvider, useTheme } from '@/components/theme-provider';
 import { CommandPalette } from '@/components/command-palette';
 import { MonoLogo } from '@/components/mono-logo';
-import { TOOLS, TOOL_CATEGORIES, type ToolId } from '@/lib/tools-registry';
+import { TOOLS, type ToolId } from '@/lib/tools-registry';
 import JsonTool from '@/components/tools/json-tool';
 import Base64Tool from '@/components/tools/base64-tool';
 import UrlTool from '@/components/tools/url-tool';
@@ -45,6 +45,12 @@ const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   log: LogTool,
 };
 
+const NAV_GROUPS: { label: string; ids: ToolId[] }[] = [
+  { label: 'Capture', ids: ['json', 'curl', 'typegen', 'image', 'svg', 'csv'] },
+  { label: 'Tools', ids: ['blurhash', 'color', 'app-asset', 'deeplink'] },
+  { label: 'More', ids: ['base64', 'timestamp', 'url', 'diff', 'regex', 'log'] },
+];
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
@@ -77,9 +83,6 @@ function AppShellInner() {
   const current = TOOLS.find((t) => t.id === activeTool) ?? TOOLS[0];
   const ToolComponent = TOOL_COMPONENTS[current.id];
   const currentIndex = TOOLS.findIndex((t) => t.id === current.id);
-  const categoryLabel = TOOL_CATEGORIES.find((c) => c.id === current.category)?.label;
-  const CurrentIcon = current.icon;
-
   const cycleTool = useCallback(
     (dir: 1 | -1) => {
       const next = TOOLS[(currentIndex + dir + TOOLS.length) % TOOLS.length];
@@ -126,24 +129,24 @@ function AppShellInner() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 z-40 h-dvh sidebar-rail border-r border-sidebar-border/70 flex flex-col transition-[width,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          sidebarOpen ? 'translate-x-0 w-[260px]' : '-translate-x-full lg:translate-x-0'
-        } ${!sidebarOpen ? (railCollapsed ? 'lg:w-[72px]' : 'lg:w-[260px]') : ''}`}
+        className={`sidebar-rail fixed left-0 top-0 z-40 flex h-dvh flex-col border-r border-sidebar-border transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:sticky ${
+          sidebarOpen ? 'w-[260px] translate-x-0' : '-translate-x-full lg:translate-x-0'
+        } ${!sidebarOpen ? (railCollapsed ? 'lg:w-[64px]' : 'lg:w-[260px]') : ''}`}
       >
         {/* Brand */}
         <div
-          className={`h-[60px] shrink-0 flex items-center ${
+          className={`flex h-[54px] shrink-0 items-center ${
             railCollapsed ? 'justify-center px-2' : 'px-4 gap-3'
           }`}
         >
           <button onClick={goHome} className="flex min-w-0 items-center gap-3 text-left" title="Go to home">
-            <div className="w-9 h-9 flex items-center justify-center shrink-0 rounded-xl bg-primary text-primary-foreground shadow-sm shadow-primary/25">
-              <MonoLogo className="w-[18px] h-[18px]" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[3px] bg-foreground text-background shadow-sm">
+              <MonoLogo className="h-4 w-4" />
             </div>
             {!railCollapsed && (
               <div className="min-w-0 flex-1 overflow-hidden">
                 <h1
-                  className="text-[23px] font-bold tracking-tight text-sidebar-foreground leading-none"
+                  className="text-[20px] font-semibold leading-none tracking-[-0.035em] text-sidebar-foreground"
                   style={{ fontFamily: 'var(--font-playfair), serif', fontStyle: 'italic' }}
                 >
                   mono
@@ -164,11 +167,11 @@ function AppShellInner() {
           <div className="px-3 pb-2">
             <button
               onClick={() => setPaletteOpen(true)}
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded-xl border border-sidebar-border/80 bg-background/55 text-muted-foreground hover:text-foreground hover:border-primary/35 hover:bg-background/80 transition-all text-left shadow-sm"
+              className="flex h-8 w-full items-center gap-2.5 rounded-[3px] border border-sidebar-border bg-background/45 px-2.5 text-left text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground"
             >
               <Search size={13} className="shrink-0 opacity-70" />
-              <span className="text-[12px] flex-1">Search…</span>
-              <kbd className="text-[10px] px-1.5 py-0.5 rounded-md bg-secondary/90 ring-1 ring-border/50 font-mono">⌘K</kbd>
+              <span className="flex-1 font-mono text-[10px] uppercase tracking-[0.06em]">Find a tool</span>
+              <kbd className="border border-border bg-secondary/70 px-1.5 py-0.5 font-mono text-[8px]">⌘K</kbd>
             </button>
           </div>
         )}
@@ -177,7 +180,7 @@ function AppShellInner() {
           <div className="px-2 pb-2">
             <button
               onClick={() => setPaletteOpen(true)}
-              className="w-full h-9 flex items-center justify-center rounded-xl border border-sidebar-border/80 bg-background/55 text-muted-foreground hover:text-foreground hover:border-primary/35 transition-colors"
+              className="flex h-8 w-full items-center justify-center rounded-[3px] border border-sidebar-border bg-background/45 text-muted-foreground transition-colors hover:text-foreground"
               title="Search (⌘K)"
             >
               <Search size={14} />
@@ -187,47 +190,45 @@ function AppShellInner() {
 
         {/* Nav */}
         <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 ${railCollapsed ? 'px-2' : 'px-2.5'}`}>
-          <div className="mb-3">
+          <div className="mb-4">
             <button
               onClick={goHome}
               title="Home"
-              className={`group relative flex w-full items-center rounded-xl text-left transition-all duration-150 ${
-                railCollapsed ? 'h-10 justify-center' : 'h-9 gap-2.5 px-2'
+              className={`group relative flex w-full items-center rounded-[3px] text-left transition-all duration-150 ${
+                railCollapsed ? 'h-9 justify-center' : 'h-8 gap-2 px-2'
               } ${
                 isHome
-                  ? 'bg-primary/12 text-sidebar-foreground shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_22%,transparent)]'
-                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/80 hover:text-sidebar-foreground'
+                  ? 'bg-sidebar-accent text-sidebar-foreground'
+                  : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground'
               }`}
             >
               {isHome && (
                 <motion.span
                   layoutId="active-rail"
-                  className="absolute left-0 top-1/2 h-[18px] w-[3px] -translate-y-1/2 rounded-full bg-primary"
-                  transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                  className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 bg-primary"
+                  transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 />
               )}
-              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center transition-colors ${
                 isHome
-                  ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
-                  : 'bg-transparent text-muted-foreground group-hover:bg-background/60 group-hover:text-foreground'
+                  ? 'text-primary'
+                  : 'text-muted-foreground group-hover:text-foreground'
               }`}>
                 <Home size={14} strokeWidth={isHome ? 2.25 : 1.85} />
               </span>
-              {!railCollapsed && <span className={`truncate text-[13px] ${isHome ? 'font-semibold' : 'font-medium'}`}>Home</span>}
+              {!railCollapsed && <span className={`truncate text-[11px] ${isHome ? 'font-semibold' : 'font-medium'}`}>Studio wall</span>}
             </button>
           </div>
-          {TOOL_CATEGORIES.map((cat, catIdx) => {
-            const tools = TOOLS.filter((t) => t.category === cat.id);
-            if (!tools.length) return null;
-
+          {NAV_GROUPS.map((group, groupIndex) => {
+            const tools = group.ids.map((id) => TOOLS.find((tool) => tool.id === id)).filter((tool): tool is (typeof TOOLS)[number] => Boolean(tool));
             return (
-              <div key={cat.id} className={`${catIdx > 0 ? 'mt-4' : ''}`}>
+              <div key={group.label} className={`${groupIndex > 0 ? 'mt-5 border-t border-sidebar-border/55 pt-4' : ''}`}>
                 {!railCollapsed ? (
-                  <p className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.16em] px-2.5 mb-1.5">
-                    {cat.label}
+                  <p className="mb-1.5 px-2 font-mono text-[8px] uppercase tracking-[0.15em] text-muted-foreground/65">
+                    {group.label}
                   </p>
                 ) : (
-                  catIdx > 0 && <div className="mx-auto mb-2 h-px w-6 bg-sidebar-border/70" />
+                  groupIndex > 0 && <div className="mx-auto mb-2 h-px w-6 bg-sidebar-border/70" />
                 )}
                 <div className="space-y-0.5">
                   {tools.map((tool) => {
@@ -238,32 +239,32 @@ function AppShellInner() {
                         key={tool.id}
                         onClick={() => setTool(tool.id)}
                         title={tool.label}
-                        className={`group relative w-full flex items-center rounded-xl text-left transition-all duration-150 ${
-                          railCollapsed ? 'justify-center h-10' : 'gap-2.5 px-2 h-9'
+                        className={`group relative flex w-full items-center rounded-[3px] text-left transition-all duration-150 ${
+                          railCollapsed ? 'h-9 justify-center' : 'h-8 gap-2 px-2'
                         } ${
                           isActive
-                            ? 'bg-primary/12 text-sidebar-foreground shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_22%,transparent)]'
-                            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/80 hover:text-sidebar-foreground'
+                            ? 'bg-sidebar-accent text-sidebar-foreground'
+                            : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground'
                         }`}
                       >
                         {isActive && (
                           <motion.span
                             layoutId="active-rail"
-                            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[18px] rounded-full bg-primary"
-                            transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                            className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 bg-primary"
+                            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                           />
                         )}
                         <span
-                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center transition-colors ${
                             isActive
-                              ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
-                              : 'bg-transparent text-muted-foreground group-hover:bg-background/60 group-hover:text-foreground'
+                              ? 'text-primary'
+                              : 'text-muted-foreground group-hover:text-foreground'
                           }`}
                         >
                           <Icon size={14} strokeWidth={isActive ? 2.25 : 1.85} />
                         </span>
                         {!railCollapsed && (
-                          <span className={`text-[13px] truncate ${isActive ? 'font-semibold' : 'font-medium'}`}>
+                          <span className={`truncate text-[11px] ${isActive ? 'font-semibold' : 'font-medium'}`}>
                             {tool.label}
                           </span>
                         )}
@@ -277,18 +278,19 @@ function AppShellInner() {
         </nav>
 
         {/* Footer */}
-        <div className={`shrink-0 border-t border-sidebar-border/60 p-2.5 ${railCollapsed ? '' : ''}`}>
+        <div className="shrink-0 border-t border-sidebar-border/60 p-2.5">
           <div className={`flex ${railCollapsed ? 'flex-col items-center gap-1' : 'items-center gap-1'}`}>
             <button
               onClick={toggleTheme}
-              className="flex items-center justify-center h-9 w-9 rounded-xl text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors"
+              className="flex h-8 w-8 items-center justify-center rounded-[3px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
               title="Toggle theme"
             >
-              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              <Moon size={14} className="dark:hidden" />
+              <Sun size={14} className="hidden dark:block" />
             </button>
             <button
               onClick={() => setCollapsed((c) => !c)}
-              className={`hidden lg:flex items-center justify-center h-9 rounded-xl text-muted-foreground hover:bg-sidebar-accent hover:text-foreground transition-colors ${
+              className={`hidden h-8 items-center justify-center rounded-[3px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:flex ${
                 railCollapsed ? 'w-9' : 'flex-1 gap-2 px-2.5'
               }`}
               title={railCollapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)'}
@@ -319,54 +321,16 @@ function AppShellInner() {
         )}
       </AnimatePresence>
 
+      <button
+        onClick={() => setSidebarOpen(true)}
+        className="surface-muted fixed left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-[3px] text-muted-foreground shadow-sm hover:text-foreground lg:hidden"
+        aria-label="Open sidebar"
+      >
+        <Menu size={18} />
+      </button>
+
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col min-h-dvh">
-        <header className="sticky top-0 z-20 h-[60px] border-b border-border/50 bg-background/70 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 -ml-1 rounded-xl hover:bg-secondary text-muted-foreground shrink-0"
-            >
-              <Menu size={18} />
-            </button>
-
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="hidden sm:flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15 shrink-0">
-                {isHome ? <Home size={16} strokeWidth={2} /> : <CurrentIcon size={16} strokeWidth={2} />}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-[15px] font-semibold tracking-tight truncate leading-none">{isHome ? 'Home' : current.label}</h2>
-                  {!isHome && categoryLabel && (
-                    <span className="hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80 bg-secondary/70 px-1.5 py-0.5 rounded-md">
-                      {categoryLabel}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground truncate mt-1 hidden sm:block">{isHome ? 'A calm place for your work in progress' : current.description}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              onClick={() => setPaletteOpen(true)}
-              className="surface-muted flex items-center gap-2 px-3 h-9 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Search size={13} />
-              <span className="hidden md:inline">Search</span>
-              <kbd className="hidden md:inline-block text-[10px] px-1.5 py-0.5 rounded-md bg-background/80 font-mono ring-1 ring-border/50">⌘K</kbd>
-            </button>
-            <button
-              onClick={toggleTheme}
-              className="lg:hidden h-9 w-9 flex items-center justify-center rounded-xl surface-muted text-muted-foreground hover:text-foreground"
-              title="Toggle theme"
-            >
-              {isDark ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-          </div>
-        </header>
-
         <main className={isHome ? 'flex-1 w-full' : 'flex-1 w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8'}>
           <AnimatePresence mode="wait">
             <motion.div

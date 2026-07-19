@@ -25,9 +25,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setIsDark(prefersDark);
-    applyTheme(prefersDark);
+    applyTheme(false);
     setHasMounted(true);
   }, []);
 
