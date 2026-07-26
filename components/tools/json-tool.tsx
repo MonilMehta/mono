@@ -15,9 +15,12 @@ import {
   X,
   ChevronUp,
   ChevronDown,
+  Braces,
+  ListTree,
+  Minimize2,
 } from 'lucide-react';
 import JsonViewer, { type ExpandMode } from '@/components/json-viewer';
-import { HighlightedText } from '@/components/highlighted-text';
+import { CodeHighlight } from '@/components/code-highlight';
 import {
   parseJson,
   computeStats,
@@ -39,6 +42,11 @@ import {
 const LARGE_PAYLOAD_CHARS = 1_000_000;
 const LARGE_PAYLOAD_KEYS = 5_000;
 const MANUAL_VALIDATION_CHARS = 5_000_000;
+const JSON_VIEWS = [
+  { id: 'tree', label: 'Tree', description: 'Explore', icon: ListTree },
+  { id: 'formatted', label: 'Formatted', description: 'Readable', icon: Braces },
+  { id: 'minified', label: 'Minified', description: 'Compact', icon: Minimize2 },
+] as const;
 
 export default function JsonTool() {
   const [input, setInput] = useState('');
@@ -394,19 +402,20 @@ export default function JsonTool() {
     if (activeTab === 'minified' && stats && !isLargePayload) {
       const minified = JSON.stringify(parsedData);
       return (
-        <pre className="text-sm font-mono whitespace-pre-wrap wrap-break-word leading-7">
-          <code>
-            <HighlightedText text={minified} query={searchQuery} />
-          </code>
-        </pre>
+        <CodeHighlight
+          code={minified}
+          language="json"
+          searchQuery={searchQuery}
+          showLineNumbers={false}
+          wrapLongLines
+        />
       );
     }
+    if (isLargePayload) {
+      return <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-7">{output}</pre>;
+    }
     return (
-      <pre className="text-sm font-mono whitespace-pre-wrap wrap-break-word leading-7">
-        <code>
-          <HighlightedText text={output} query={searchQuery} />
-        </code>
-      </pre>
+      <CodeHighlight code={output} language="json" searchQuery={searchQuery} />
     );
   };
 
@@ -627,20 +636,27 @@ export default function JsonTool() {
           >
             {!parseError && (
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-                <div className="flex items-center gap-1 bg-secondary/40 p-1.5 rounded-2xl w-fit overflow-x-auto no-scrollbar shrink-0 border border-border/30">
-                  {(isLargePayload ? (['formatted'] as const) : (['tree', 'formatted', 'minified'] as const)).map((tab) => (
+                <div className="flex w-fit shrink-0 items-center gap-1 overflow-x-auto rounded-2xl border border-border/40 bg-card p-1.5 shadow-sm no-scrollbar">
+                  {JSON_VIEWS.filter((view) => !isLargePayload || view.id === 'formatted').map((view) => {
+                    const Icon = view.icon;
+                    return (
                     <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`px-5 py-2.5 text-sm font-semibold rounded-xl capitalize whitespace-nowrap transition-all ${
-                        activeTab === tab
-                          ? 'bg-background text-foreground shadow-sm ring-1 ring-border/50'
-                          : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-secondary/60'
+                      key={view.id}
+                      onClick={() => setActiveTab(view.id)}
+                      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-left whitespace-nowrap transition-all ${
+                        activeTab === view.id
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground'
                       }`}
                     >
-                      {isLargePayload ? 'source' : tab}
+                      <Icon size={14} />
+                      <span>
+                        <span className="block text-xs font-semibold leading-none">{isLargePayload ? 'Source' : view.label}</span>
+                        {!isLargePayload && <span className={`mt-1 block text-[9px] leading-none ${activeTab === view.id ? 'text-primary-foreground/65' : 'text-muted-foreground/65'}`}>{view.description}</span>}
+                      </span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
                 
                 <div className="flex items-center gap-2 w-full xl:w-auto">
@@ -899,7 +915,11 @@ export default function JsonTool() {
                           </button>
                         </div>
                         <p className="text-xs text-muted-foreground">{repairPreview.changes.join(' · ')}</p>
-                        <pre className="max-h-64 overflow-auto rounded-xl bg-background/60 p-3 text-xs font-mono text-foreground/75 whitespace-pre-wrap">{repairPreview.text}</pre>
+                        <CodeHighlight
+                          code={repairPreview.text}
+                          language="json"
+                          className="max-h-64 rounded-xl bg-background/60 p-3"
+                        />
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground">No safe repair was found. The source is left unchanged.</p>

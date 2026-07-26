@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, Image as ImageIcon2 } from 'lucide-react';
-import { encode } from 'blurhash';
+import { decode, encode } from 'blurhash';
 import { rgbaToThumbHash } from 'thumbhash';
 import { CopyButton } from '@/components/copy-button';
 
@@ -21,6 +21,7 @@ export default function BlurhashTool() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [blurhash, setBlurhash] = useState<string>('');
+  const [blurhashPreview, setBlurhashPreview] = useState<string>('');
   const [thumbhash, setThumbhash] = useState<string>('');
 
   const loadFile = useCallback((file: File) => {
@@ -73,6 +74,17 @@ export default function BlurhashTool() {
     const bh = encode(imageData.data, w, h, 4, 3);
     setBlurhash(bh);
 
+    const previewScale = Math.min(64 / w, 64 / h);
+    const previewWidth = Math.max(1, Math.round(w * previewScale));
+    const previewHeight = Math.max(1, Math.round(h * previewScale));
+    const previewPixels = decode(bh, previewWidth, previewHeight);
+    const previewCanvas = document.createElement('canvas');
+    const previewContext = previewCanvas.getContext('2d');
+    previewCanvas.width = previewWidth;
+    previewCanvas.height = previewHeight;
+    previewContext?.putImageData(new ImageData(previewPixels, previewWidth, previewHeight), 0, 0);
+    setBlurhashPreview(previewCanvas.toDataURL());
+
     // Generate ThumbHash
     const th = rgbaToThumbHash(w, h, imageData.data);
     
@@ -94,6 +106,7 @@ export default function BlurhashTool() {
   const clear = () => {
     setImage(null);
     setBlurhash('');
+    setBlurhashPreview('');
     setThumbhash('');
     setShowOutput(false);
   };
@@ -238,6 +251,18 @@ export default function BlurhashTool() {
                         <div className="bg-secondary/40 border border-border/30 rounded-xl p-3 font-mono text-sm text-foreground break-all">
                           {blurhash}
                         </div>
+                        {blurhashPreview && (
+                          <div className="mt-3 overflow-hidden rounded-xl border border-border/30 bg-secondary/40">
+                            <img
+                              src={blurhashPreview}
+                              alt="Decoded BlurHash preview"
+                              className="h-36 w-full object-cover"
+                            />
+                            <div className="border-t border-border/30 px-3 py-2 text-xs text-muted-foreground">
+                              Decoded preview
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div>

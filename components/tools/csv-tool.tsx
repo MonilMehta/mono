@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Table2 } from 'lucide-react';
 import { ToolCard, ToolTextarea, ToolBar, EmptyState, ToolChip } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
+import { CodeHighlight } from '@/components/code-highlight';
 import {
   csvToJson,
   detectDelimiter,
@@ -96,9 +97,11 @@ export default function CsvTool() {
           {result.error ? (
             <div className="flex-1 p-5 text-sm text-destructive font-mono">{result.error}</div>
           ) : result.text ? (
-            <pre className="flex-1 p-5 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
-              {result.text}
-            </pre>
+            <CodeHighlight
+              code={result.text}
+              language={mode === 'csv-to-json' ? 'json' : mode === 'json-to-md' ? 'markdown' : 'plain'}
+              className="flex-1 p-5"
+            />
           ) : (
             <EmptyState
               icon={Table2}

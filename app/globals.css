@@ -309,31 +309,6 @@
     transition: box-shadow 180ms ease;
   }
 
-  .studio-card-json .studio-card-dot,
-  .studio-card-request .studio-card-dot {
-    background: #265da7;
-  }
-
-  .studio-card-image .studio-card-dot {
-    background: #c96345;
-  }
-
-  .studio-card-svg .studio-card-dot {
-    background: #718265;
-  }
-
-  .studio-card-note .studio-card-dot {
-    background: #c39f43;
-  }
-
-  .studio-card-dot {
-    width: 13px;
-    height: 13px;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    box-shadow: inset 0 0 0 1px rgba(20, 24, 30, 0.08);
-  }
-
   .studio-registration {
     width: 112px;
     height: 56px;

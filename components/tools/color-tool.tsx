@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Pipette, Shuffle } from 'lucide-react';
 import { ToolCard } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
 
@@ -66,6 +67,10 @@ export default function ColorTool() {
 
   const rgb = useMemo(() => hexToRgb(hex) ?? { r: 99, g: 102, b: 241 }, [hex]);
   const hsl = useMemo(() => rgbToHsl(rgb), [rgb]);
+  const isLight = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000 > 150;
+  const palette = useMemo(() => [12, 25, 40, 55, 70, 84, 94].map((lightness) => (
+    rgbToHex(hslToRgb({ ...hsl, l: lightness }))
+  )), [hsl]);
 
   const updateFromHex = (v: string) => {
     const h = v.startsWith('#') ? v : `#${v}`;
@@ -98,6 +103,19 @@ export default function ColorTool() {
     }
   };
 
+  const updateHslValue = (next: Hsl) => {
+    const r = hslToRgb(next);
+    setHex(rgbToHex(r));
+    setRgbStr(`${r.r}, ${r.g}, ${r.b}`);
+    setHslStr(`${next.h}, ${next.s}%, ${next.l}%`);
+  };
+
+  const randomize = () => {
+    const values = new Uint8Array(3);
+    crypto.getRandomValues(values);
+    updateFromHex(rgbToHex({ r: values[0], g: values[1], b: values[2] }));
+  };
+
   const formats = {
     hex: hex,
     rgb: `rgb(${rgbStr})`,
@@ -108,22 +126,95 @@ export default function ColorTool() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <ToolCard className="p-6 space-y-6">
+      <ToolCard className="p-6 space-y-5">
         <div
-          className="w-full h-40 rounded-2xl border border-border/30 transition-colors"
+          className="relative h-48 w-full overflow-hidden rounded-2xl border border-black/10 transition-colors"
           style={{ backgroundColor: hex }}
-        />
+        >
+          <div
+            className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 bg-gradient-to-t from-black/35 to-transparent p-5"
+            style={{ color: isLight ? '#171717' : '#ffffff' }}
+          >
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] opacity-65">Selected color</p>
+              <p className="mt-1 font-mono text-2xl font-semibold tracking-tight">{hex.toUpperCase()}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="relative inline-flex h-9 cursor-pointer items-center gap-2 rounded-xl border border-current/20 bg-white/15 px-3 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-white/25">
+                <Pipette size={14} />
+                Pick
+                <input
+                  type="color"
+                  value={hex.length === 7 ? hex : '#6366f1'}
+                  onChange={(e) => updateFromHex(e.target.value)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  aria-label="Pick a color"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={randomize}
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-current/20 bg-white/15 px-3 text-xs font-semibold backdrop-blur-sm transition-colors hover:bg-white/25"
+              >
+                <Shuffle size={14} />
+                Random
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-2xl border border-border/50 bg-secondary/25 p-4">
+          <ColorSlider
+            label="Hue"
+            value={hsl.h}
+            max={360}
+            unit="°"
+            background="linear-gradient(to right, #ef4444, #eab308, #22c55e, #06b6d4, #3b82f6, #a855f7, #ef4444)"
+            onChange={(value) => updateHslValue({ ...hsl, h: value })}
+          />
+          <ColorSlider
+            label="Saturation"
+            value={hsl.s}
+            max={100}
+            unit="%"
+            background={`linear-gradient(to right, hsl(${hsl.h} 0% ${hsl.l}%), hsl(${hsl.h} 100% ${hsl.l}%))`}
+            onChange={(value) => updateHslValue({ ...hsl, s: value })}
+          />
+          <ColorSlider
+            label="Lightness"
+            value={hsl.l}
+            max={100}
+            unit="%"
+            background={`linear-gradient(to right, #000, hsl(${hsl.h} ${hsl.s}% 50%), #fff)`}
+            onChange={(value) => updateHslValue({ ...hsl, l: value })}
+          />
+        </div>
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-medium text-foreground">Tints & shades</p>
+            <p className="text-[10px] text-muted-foreground">Click to select</p>
+          </div>
+          <div className="grid h-12 grid-cols-7 overflow-hidden rounded-xl border border-border/50">
+            {palette.map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => updateFromHex(color)}
+                className="relative transition-transform hover:z-10 hover:scale-110 focus:z-10 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white/80"
+                style={{ backgroundColor: color }}
+                title={color}
+                aria-label={`Select ${color}`}
+              />
+            ))}
+          </div>
+        </div>
+
         <div className="space-y-4">
           <ColorField label="HEX" value={hex} onChange={updateFromHex} />
           <ColorField label="RGB" value={rgbStr} onChange={updateFromRgb} prefix="rgb(" suffix=")" />
           <ColorField label="HSL" value={hslStr} onChange={updateFromHsl} prefix="hsl(" suffix=")" />
         </div>
-        <input
-          type="color"
-          value={hex.length === 7 ? hex : '#6366f1'}
-          onChange={(e) => updateFromHex(e.target.value)}
-          className="w-full h-10 rounded-lg cursor-pointer"
-        />
       </ToolCard>
 
       <ToolCard className="p-6">
@@ -144,6 +235,36 @@ export default function ColorTool() {
         </p>
       </ToolCard>
     </div>
+  );
+}
+
+function ColorSlider({
+  label, value, max, unit, background, onChange,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  unit: string;
+  background: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 flex items-center justify-between text-xs">
+        <span className="font-medium text-foreground">{label}</span>
+        <span className="min-w-12 text-right font-mono text-muted-foreground">{value}{unit}</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="h-2 w-full cursor-pointer appearance-none rounded-full border border-black/10 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-foreground [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:shadow-md"
+        style={{ background }}
+        aria-label={label}
+      />
+    </label>
   );
 }
 

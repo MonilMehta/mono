@@ -1,11 +1,12 @@
 'use client';
 
-import { animate, AnimatePresence, motion, type PanInfo, useMotionValue } from 'framer-motion';
-import { ArrowUp, Braces, Command, FileText, ImagePlus, Paperclip, PenTool, Terminal, X } from 'lucide-react';
+import { animate, AnimatePresence, LayoutGroup, motion, type PanInfo, useMotionValue } from 'framer-motion';
+import { Archive, ArrowUp, Braces, FileText, GitPullRequest, ImagePlus, Link2, Paperclip, PenTool, RotateCcw, Search, Terminal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-type ArtifactKind = 'note' | 'image' | 'json' | 'request' | 'svg';
+type ArtifactKind = 'note' | 'image' | 'json' | 'request' | 'svg' | 'github';
+type Priority = 'p0' | 'p1' | 'p2';
 
 type ArtifactRecord = {
   id: string;
@@ -13,19 +14,16 @@ type ArtifactRecord = {
   createdAt: number;
   image?: Blob;
   kind?: ArtifactKind;
+  priority?: Priority;
+  archived?: boolean;
+  stackId?: string;
+  sourceUrl?: string;
+  sourceRepo?: string;
+  sourceNumber?: number;
+  sourceType?: 'issue' | 'pull request';
 };
 
 type Artifact = ArtifactRecord & { imageUrl?: string };
-
-type StudioSample = {
-  id: string;
-  kind: ArtifactKind;
-  label: string;
-  meta: string;
-  text?: string;
-  image?: string;
-  imageAlt?: string;
-};
 
 type DragPreview = {
   id: string;
@@ -36,60 +34,41 @@ type DragPreview = {
   image?: string;
   imageAlt?: string;
   angle: number;
+  priority: Priority;
+  memberIds: string[];
+};
+
+type GitHubResult = {
+  id: number;
+  title: string;
+  html_url: string;
+  repository_url: string;
+  number: number;
+  pull_request?: unknown;
 };
 
 const DB_NAME = 'mono-home';
 const STORE_NAME = 'todos';
 const SETTLE_ANGLES = [-1.2, 0.8, -0.45, 1.05, -0.7, 0.4];
 const HANG_OFFSETS = [2, 8, 4, 10, 6, 0];
-
-const STUDIO_SAMPLES: StudioSample[] = [
-  {
-    id: 'sample-json',
-    kind: 'json',
-    label: 'JSON',
-    meta: '3.2 KB',
-    text: '{\n  "id": "usr_01H7X",\n  "name": "Monil Mehta",\n  "role": "Developer",\n  "status": "active"\n}',
-  },
-  {
-    id: 'sample-image',
-    kind: 'image',
-    label: 'Image',
-    meta: 'JPG',
-    image: '/studio-assets/landscape.jpg',
-    imageAlt: 'A grainy landscape of clouds and colorful rolling hills',
-  },
-  {
-    id: 'sample-request',
-    kind: 'request',
-    label: 'cURL',
-    meta: '1.1 KB',
-    text: "curl -X POST \\\nhttps://api.example.com/v1/auth \\\n-H 'Content-Type: application/json' \\\n-d '{\n  \"email\": \"hello@mono.dev\",\n  \"password\": \"••••••••\"\n}'",
-  },
-  {
-    id: 'sample-study',
-    kind: 'svg',
-    label: 'Interface study',
-    meta: 'Draft 04',
-    image: '/studio-assets/interface-study.jpg',
-    imageAlt: 'Architectural drawing of a responsive browser interface',
-  },
-  {
-    id: 'sample-material',
-    kind: 'image',
-    label: 'Material study',
-    meta: 'Ink proof',
-    image: '/studio-assets/material-study.jpg',
-    imageAlt: 'Risograph color-token print proof',
-  },
-];
+const PRIORITIES: Priority[] = ['p0', 'p1', 'p2'];
+const FOCUS_LIMIT = 3;
+const PRIORITY_COLORS: Record<Priority, string> = {
+  p0: '#245da8',
+  p1: '#bd9235',
+  p2: '#555b5c',
+};
+const TEST_ARTIFACT_IDS = ['sample-json', 'sample-image', 'sample-request', 'sample-study', 'sample-material'];
 
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = window.indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(STORE_NAME)) {
-        request.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
+    const request = window.indexedDB.open(DB_NAME, 3);
+    request.onupgradeneeded = (event) => {
+      const store = request.result.objectStoreNames.contains(STORE_NAME)
+        ? request.transaction?.objectStore(STORE_NAME)
+        : request.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      if (event.oldVersion < 3) {
+        TEST_ARTIFACT_IDS.forEach((id) => store?.delete(id));
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -138,6 +117,8 @@ function artifactFromRecord(record: ArtifactRecord): Artifact {
   return {
     ...record,
     kind: record.kind ?? detectKind(record.text, Boolean(record.image)),
+    priority: record.priority ?? 'p2',
+    archived: record.archived ?? false,
     imageUrl: record.image ? URL.createObjectURL(record.image) : undefined,
   };
 }
@@ -151,11 +132,41 @@ function formatArtifactText(artifact: Artifact) {
   }
 }
 
+function makeRoomForFocus(artifacts: Artifact[], incomingStackKey: string): Artifact[] {
+  const focusedStackKeys = Array.from(new Set(artifacts
+    .filter((artifact) => !artifact.archived && (artifact.priority ?? 'p2') === 'p0')
+    .map((artifact) => artifact.stackId ?? artifact.id)))
+    .filter((key) => key !== incomingStackKey);
+  if (focusedStackKeys.length < FOCUS_LIMIT) return artifacts;
+  const displacedStackKey = focusedStackKeys.at(-1);
+  return artifacts.map((artifact): Artifact => (artifact.stackId ?? artifact.id) === displacedStackKey
+    ? { ...artifact, priority: 'p1' }
+    : artifact);
+}
+
+async function githubRequestError(response: Response, action: string) {
+  const payload = await response.json().catch(() => null) as { message?: string } | null;
+  if (response.status === 401) {
+    return new Error('GitHub rejected this token (401). It may be expired, revoked, or issued for a different GitHub host.');
+  }
+  if (response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0') {
+    return new Error('GitHub’s API rate limit has been reached. Wait for it to reset, then try again.');
+  }
+  if (response.status === 403) {
+    const permissions = response.headers.get('x-accepted-github-permissions');
+    return new Error(permissions
+      ? `The token is valid, but it cannot ${action}. GitHub requires: ${permissions}.`
+      : `The token is valid, but GitHub denied access to ${action}. Check its repository selection and organization approval.`);
+  }
+  return new Error(payload?.message ? `GitHub: ${payload.message}` : `GitHub could not ${action} (${response.status}).`);
+}
+
 function KindMark({ kind }: { kind: ArtifactKind }) {
   if (kind === 'json') return <Braces size={12} />;
   if (kind === 'request') return <Terminal size={12} />;
   if (kind === 'svg') return <PenTool size={12} />;
   if (kind === 'image') return <ImagePlus size={12} />;
+  if (kind === 'github') return <GitPullRequest size={12} />;
   return <FileText size={12} />;
 }
 
@@ -163,6 +174,7 @@ function StudioCard({
   kind,
   label,
   meta,
+  priority,
   text,
   image,
   imageAlt,
@@ -170,6 +182,7 @@ function StudioCard({
   kind: ArtifactKind;
   label: string;
   meta: string;
+  priority: Priority;
   text?: string;
   image?: string;
   imageAlt?: string;
@@ -178,7 +191,10 @@ function StudioCard({
     <article className={`studio-card studio-card-${kind} group relative flex h-[306px] flex-col`}>
       <div className="flex h-12 shrink-0 items-center justify-between gap-3 px-4">
         <div className="flex min-w-0 items-center gap-2 font-mono text-[9px] uppercase tracking-[0.08em] text-foreground/80">
-          <span className="studio-card-dot" />
+          <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-foreground/12 bg-black/[0.03] px-2.5 font-mono text-[8px] tracking-[0.08em] text-foreground/70">
+            <span className="h-2 w-2 rounded-full" style={{ background: PRIORITY_COLORS[priority] }} />
+            {priority}
+          </span>
           <KindMark kind={kind} />
           <span className="sr-only">{label}</span>
         </div>
@@ -204,14 +220,27 @@ export function HomeDashboard() {
   const [draft, setDraft] = useState('');
   const [pendingImage, setPendingImage] = useState<File | null>(null);
   const [pendingImageUrl, setPendingImageUrl] = useState<string>();
+  const [draftPriority, setDraftPriority] = useState<Priority>('p1');
+  const [cardQuery, setCardQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [discardingId, setDiscardingId] = useState<string>();
   const [draggingId, setDraggingId] = useState<string>();
   const [dragAtShredder, setDragAtShredder] = useState(false);
+  const [dragAtArchive, setDragAtArchive] = useState(false);
   const [dragPreview, setDragPreview] = useState<DragPreview>();
-  const [hiddenSampleIds, setHiddenSampleIds] = useState<string[]>([]);
+  const [returningFocusId, setReturningFocusId] = useState<string>();
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
+  const [githubUsername, setGithubUsername] = useState('');
+  const [githubToken, setGithubToken] = useState('');
+  const [githubConnectedUsername, setGithubConnectedUsername] = useState('');
+  const [githubResults, setGithubResults] = useState<GitHubResult[]>([]);
+  const [githubLoading, setGithubLoading] = useState(false);
+  const [githubError, setGithubError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shredderRef = useRef<HTMLDivElement>(null);
+  const archiveRef = useRef<HTMLButtonElement>(null);
   const dragProxyRefs = useRef(new Map<string, HTMLDivElement>());
   const dragOriginRef = useRef({ x: 0, y: 0 });
   const dragOffsetRef = useRef({ x: 125, y: 153 });
@@ -223,7 +252,7 @@ export function HomeDashboard() {
     readArtifacts()
       .then((records) => {
         const restored = records.sort((a, b) => b.createdAt - a.createdAt).map(artifactFromRecord);
-        imageUrlsRef.current = restored.flatMap((artifact) => (artifact.imageUrl ? [artifact.imageUrl] : []));
+        imageUrlsRef.current = restored.flatMap((artifact) => artifact.imageUrl?.startsWith('blob:') ? [artifact.imageUrl] : []);
         setArtifacts(restored);
       })
       .catch(() => undefined)
@@ -267,45 +296,171 @@ export function HomeDashboard() {
 
     const imageUrl = pendingImage ? URL.createObjectURL(pendingImage) : undefined;
     if (imageUrl) imageUrlsRef.current.push(imageUrl);
-    setArtifacts((current) => [
-      {
-        id: crypto.randomUUID(),
+    const id = crypto.randomUUID();
+    setArtifacts((current) => {
+      const prepared = draftPriority === 'p0' ? makeRoomForFocus(current, id) : current;
+      return [{
+        id,
         text: text || 'Untitled reference',
         createdAt: Date.now(),
         image: pendingImage ?? undefined,
         imageUrl,
         kind: detectKind(text, Boolean(pendingImage)),
-      },
-      ...current,
-    ]);
+        priority: draftPriority,
+        archived: false,
+      }, ...prepared];
+    });
     setDraft('');
     setPendingImage(null);
     setPendingImageUrl(undefined);
+    setDraftPriority('p1');
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function removeArtifact(id: string, isUserArtifact = true) {
-    if (!isUserArtifact) {
-      setHiddenSampleIds((current) => current.includes(id) ? current : [...current, id]);
-      setDiscardingId(undefined);
-      setDraggingId(undefined);
-      setDragAtShredder(false);
-      setDragPreview(undefined);
-      return;
-    }
+  function cyclePriority(priority: Priority) {
+    return PRIORITIES[(PRIORITIES.indexOf(priority) + 1) % PRIORITIES.length];
+  }
 
+  function cycleArtifactPriority(id: string) {
     setArtifacts((current) => {
-      const removed = current.find((artifact) => artifact.id === id);
-      if (removed?.imageUrl) {
+      const artifact = current.find((item) => item.id === id);
+      if (!artifact) return current;
+      const stackKey = artifact.stackId ?? artifact.id;
+      const memberIds = artifact.stackId
+        ? current.filter((item) => item.stackId === artifact.stackId).map((item) => item.id)
+        : [id];
+      const next = cyclePriority(artifact.priority ?? 'p2');
+      const prepared = next === 'p0' ? makeRoomForFocus(current, stackKey) : current;
+      return prepared.map((item) => {
+        if (memberIds.includes(item.id)) return { ...item, priority: next };
+        return item;
+      });
+    });
+  }
+
+  function returnToWall(id: string) {
+    setReturningFocusId(id);
+    setArtifacts((current) => {
+      const artifact = current.find((item) => item.id === id);
+      if (!artifact) return current;
+      const stackKey = artifact.stackId ?? artifact.id;
+      return current.map((item) => (item.stackId ?? item.id) === stackKey ? { ...item, priority: 'p1' } : item);
+    });
+  }
+
+  function removeArtifact(ids: string[]) {
+    setArtifacts((current) => {
+      current.filter((artifact) => ids.includes(artifact.id)).forEach((removed) => {
+        if (!removed.imageUrl?.startsWith('blob:')) return;
         URL.revokeObjectURL(removed.imageUrl);
         imageUrlsRef.current = imageUrlsRef.current.filter((url) => url !== removed.imageUrl);
-      }
-      return current.filter((artifact) => artifact.id !== id);
+      });
+      return current.filter((artifact) => !ids.includes(artifact.id));
     });
     setDiscardingId(undefined);
     setDraggingId(undefined);
     setDragAtShredder(false);
+    setDragAtArchive(false);
     setDragPreview(undefined);
+  }
+
+  function archiveArtifacts(ids: string[]) {
+    setArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: true } : artifact));
+    setDraggingId(undefined);
+    setDragAtArchive(false);
+    setDragPreview(undefined);
+  }
+
+  function restoreArtifacts(ids: string[]) {
+    setArtifacts((current) => {
+      const restored = current.find((artifact) => ids.includes(artifact.id));
+      const prepared = restored && (restored.priority ?? 'p2') === 'p0'
+        ? makeRoomForFocus(current, restored.stackId ?? restored.id)
+        : current;
+      return prepared.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: false } : artifact);
+    });
+  }
+
+  function linkArtifacts(sourceIds: string[], targetId: string) {
+    setArtifacts((current) => {
+      const target = current.find((artifact) => artifact.id === targetId);
+      if (!target) return current;
+      const targetIds = target.stackId
+        ? current.filter((artifact) => artifact.stackId === target.stackId).map((artifact) => artifact.id)
+        : [target.id];
+      const stackId = target.stackId ?? target.id;
+      const linkedIds = new Set([...sourceIds, ...targetIds]);
+      return current.map((artifact) => linkedIds.has(artifact.id) ? { ...artifact, stackId } : artifact);
+    });
+    setDraggingId(undefined);
+    setDragPreview(undefined);
+  }
+
+  async function connectGithub() {
+    let username = githubUsername.trim().replace(/^@/, '');
+    const token = githubToken.replace(/\s+/g, '');
+    if (!username && !token) return;
+    setGithubLoading(true);
+    setGithubError('');
+    try {
+      const headers: HeadersInit = {
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      if (token) {
+        const viewerResponse = await fetch('https://api.github.com/user', { headers });
+        if (!viewerResponse.ok) throw await githubRequestError(viewerResponse, 'authenticate');
+        const viewer = await viewerResponse.json() as { login: string };
+        if (!username) {
+          username = viewer.login;
+          setGithubUsername(viewer.login);
+        }
+      }
+      const queries = [
+        `is:open assignee:${username}`,
+        `is:open is:pr review-requested:${username}`,
+        `is:open is:pr author:${username}`,
+      ];
+      const responses = await Promise.all(queries.map((query) => fetch(`https://api.github.com/search/issues?q=${encodeURIComponent(query)}&per_page=8`, {
+        headers,
+      })));
+      const failedResponse = responses.find((response) => !response.ok);
+      if (failedResponse) throw await githubRequestError(failedResponse, 'search issues and pull requests');
+      const payloads = await Promise.all(responses.map((response) => response.json() as Promise<{ items: GitHubResult[] }>));
+      const unique = new Map<number, GitHubResult>();
+      payloads.flatMap((payload) => payload.items).forEach((item) => unique.set(item.id, item));
+      setGithubResults(Array.from(unique.values()).slice(0, 12));
+      setGithubConnectedUsername(username);
+    } catch (error) {
+      setGithubError(error instanceof Error ? error.message : 'Unable to reach GitHub.');
+    } finally {
+      setGithubLoading(false);
+    }
+  }
+
+  function disconnectGithub() {
+    setGithubConnectedUsername('');
+    setGithubToken('');
+    setGithubResults([]);
+    setGithubError('');
+  }
+
+  function pinGithubItem(item: GitHubResult) {
+    const repo = item.repository_url.split('/').slice(-2).join('/');
+    setArtifacts((current) => [{
+      id: crypto.randomUUID(),
+      text: item.title,
+      createdAt: Date.now(),
+      kind: 'github',
+      priority: 'p1',
+      archived: false,
+      sourceUrl: item.html_url,
+      sourceRepo: repo,
+      sourceNumber: item.number,
+      sourceType: item.pull_request ? 'pull request' : 'issue',
+    }, ...current]);
+    setGithubResults((current) => current.filter((result) => result.id !== item.id));
   }
 
   function getPreviewPosition(point: PanInfo['point']) {
@@ -326,12 +481,25 @@ export function HomeDashboard() {
     );
   }
 
+  function isNearArchive(point: PanInfo['point']) {
+    const bounds = archiveRef.current?.getBoundingClientRect();
+    return Boolean(
+      bounds &&
+      point.x >= bounds.left - 54 &&
+      point.x <= bounds.right + 84 &&
+      point.y >= bounds.top - 110 &&
+      point.y <= bounds.bottom + 30
+    );
+  }
+
   function updateDrag(id: string, info: PanInfo) {
     const position = getPreviewPosition(info.point);
     previewX.set(position.x);
     previewY.set(position.y);
     const near = isNearShredder(info.point);
     setDragAtShredder((current) => current === near ? current : near);
+    const nearArchive = !near && isNearArchive(info.point);
+    setDragAtArchive((current) => current === nearArchive ? current : nearArchive);
   }
 
   function finishDrag(id: string, info: PanInfo) {
@@ -342,7 +510,38 @@ export function HomeDashboard() {
       return;
     }
 
+    if (dragPreview && isNearArchive(info.point) && artifacts.some((artifact) => artifact.id === id)) {
+      const bounds = archiveRef.current?.getBoundingClientRect();
+      if (bounds) {
+        setDragAtArchive(true);
+        void Promise.all([
+          animate(previewX, bounds.left + 18, { duration: 0.32, ease: [0.22, 1, 0.36, 1] }),
+          animate(previewY, bounds.top - 20, { duration: 0.32, ease: [0.22, 1, 0.36, 1] }),
+        ]).then(() => archiveArtifacts(dragPreview.memberIds));
+        return;
+      }
+    }
+
+    if (dragPreview && artifacts.some((artifact) => artifact.id === id)) {
+      const target = artifacts.find((artifact) => {
+        if (artifact.archived || dragPreview.memberIds.includes(artifact.id)) return false;
+        const bounds = dragProxyRefs.current.get(artifact.id)?.getBoundingClientRect();
+        return Boolean(bounds && info.point.x >= bounds.left && info.point.x <= bounds.right && info.point.y >= bounds.top && info.point.y <= bounds.bottom);
+      });
+      if (target) {
+        const bounds = dragProxyRefs.current.get(target.id)?.getBoundingClientRect();
+        if (bounds) {
+          void Promise.all([
+            animate(previewX, bounds.left + 10, { duration: 0.28, ease: [0.22, 1, 0.36, 1] }),
+            animate(previewY, bounds.top + 10, { duration: 0.28, ease: [0.22, 1, 0.36, 1] }),
+          ]).then(() => linkArtifacts(dragPreview.memberIds, target.id));
+          return;
+        }
+      }
+    }
+
     setDragAtShredder(false);
+    setDragAtArchive(false);
     void Promise.all([
       animate(previewX, dragOriginRef.current.x, { duration: 0.36, ease: [0.22, 1, 0.36, 1] }),
       animate(previewY, dragOriginRef.current.y, { duration: 0.36, ease: [0.22, 1, 0.36, 1] }),
@@ -352,11 +551,132 @@ export function HomeDashboard() {
     });
   }
 
-  const wallItems = [...artifacts, ...STUDIO_SAMPLES.filter((sample) => !hiddenSampleIds.includes(sample.id))];
-  const wallWidth = Math.max(1220, wallItems.length * 276 + 96);
+  const activeArtifacts = artifacts.filter((artifact) => !artifact.archived);
+  const archivedArtifacts = artifacts.filter((artifact) => artifact.archived);
+  const artifactGroups = new Map<string, Artifact[]>();
+  activeArtifacts.forEach((artifact) => {
+    const key = artifact.stackId ?? artifact.id;
+    artifactGroups.set(key, [...(artifactGroups.get(key) ?? []), artifact]);
+  });
+  const activeGroups = Array.from(artifactGroups.entries()).map(([stackId, group]) => [
+    ...group.filter((artifact) => artifact.id === stackId),
+    ...group.filter((artifact) => artifact.id !== stackId),
+  ]);
+  const focusGroups = activeGroups.filter((group) => (group[0].priority ?? 'p2') === 'p0').slice(0, FOCUS_LIMIT);
+  const focusedIds = new Set(focusGroups.flatMap((group) => group.map((artifact) => artifact.id)));
+  const wallArtifacts = activeGroups.filter((group) => !focusedIds.has(group[0].id)).map((group) => group[0]);
+  const wallItems = wallArtifacts;
+  const wallWidth = Math.max(1220, activeGroups.length * 276 + 96);
   return (
     <section className="studio-room relative min-h-dvh overflow-hidden pb-16">
       <img aria-hidden="true" src="/studio-assets/landscape.jpg" className="studio-landscape" style={{ height: 'calc(100% - 185px)' }} />
+
+      <div className="absolute right-6 top-5 z-50 flex items-center gap-2 sm:right-10">
+        <div className="relative">
+          <button
+            onClick={() => setGithubOpen((open) => !open)}
+            className={`flex h-9 items-center gap-2 border-b px-2.5 font-mono text-[9px] transition-colors ${githubOpen ? 'border-primary/55 text-primary' : 'border-foreground/14 text-foreground/48 hover:text-foreground'}`}
+            aria-label="Connect GitHub"
+          >
+            <GitPullRequest size={13} />
+            <span className="hidden sm:inline">{githubConnectedUsername ? `@${githubConnectedUsername}` : 'GitHub'}</span>
+          </button>
+          <AnimatePresence>
+            {githubOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                className="absolute right-0 top-[calc(100%+8px)] w-[min(88vw,440px)] border border-border/70 bg-card p-3 text-card-foreground shadow-[0_20px_45px_-24px_rgba(20,24,30,0.55)]"
+              >
+                <div className="mb-3">
+                  <div className="font-mono text-[8px] uppercase tracking-[0.13em] text-foreground/55">GitHub inbox</div>
+                  <p className="mt-1 text-[10px] text-foreground/48">Assigned issues, active pull requests, and reviews.</p>
+                </div>
+                {githubConnectedUsername ? (
+                  <div className="flex items-center justify-between border-y border-foreground/10 py-2">
+                    <div className="flex items-center gap-2 font-mono text-[9px] text-foreground/70">
+                      <span className="h-2 w-2 rounded-full bg-[#245da8]" /> @{githubConnectedUsername}
+                    </div>
+                    <button onClick={disconnectGithub} className="font-mono text-[8px] uppercase tracking-[0.1em] text-foreground/48 hover:text-foreground">Disconnect</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="grid gap-1 font-mono text-[7px] uppercase tracking-[0.1em] text-foreground/42">
+                        Username <span className="normal-case tracking-normal text-foreground/35">optional with token</span>
+                        <input
+                          value={githubUsername}
+                          onChange={(event) => setGithubUsername(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') void connectGithub();
+                          }}
+                          placeholder="monil"
+                          className="min-w-0 border border-border/70 bg-background/70 px-3 py-2 font-mono text-[11px] normal-case tracking-normal text-foreground outline-none focus:border-primary/55"
+                        />
+                      </label>
+                      <label className="grid gap-1 font-mono text-[7px] uppercase tracking-[0.1em] text-foreground/42">
+                        Private token <span className="normal-case tracking-normal text-foreground/35">optional</span>
+                        <input
+                          type="password"
+                          autoComplete="off"
+                          value={githubToken}
+                          onChange={(event) => setGithubToken(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') void connectGithub();
+                          }}
+                          placeholder="github_pat_…"
+                          className="min-w-0 border border-border/70 bg-background/70 px-3 py-2 font-mono text-[11px] normal-case tracking-normal text-foreground outline-none focus:border-primary/55"
+                        />
+                      </label>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-4">
+                      <p className="max-w-[270px] text-[9px] leading-4 text-foreground/40">Used only for this session and sent directly to api.github.com. Fine-grained tokens must include the repositories you want shown.</p>
+                      <button onClick={() => void connectGithub()} disabled={githubLoading || (!githubUsername.trim() && !githubToken.trim())} className="h-8 bg-primary px-4 font-mono text-[8px] uppercase tracking-[0.1em] text-primary-foreground disabled:opacity-35">
+                        {githubLoading ? 'Loading' : 'Connect'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {githubError && <p className="mt-2 whitespace-pre-line font-mono text-[9px] leading-4 text-destructive">{githubError}</p>}
+                {githubResults.length > 0 && (
+                  <div className="mt-3 max-h-52 space-y-1 overflow-y-auto">
+                    {githubResults.map((item) => {
+                      const repo = item.repository_url.split('/').slice(-2).join('/');
+                      return (
+                        <div key={item.id} className="flex items-center gap-3 border-t border-foreground/8 px-1 py-2">
+                          <GitPullRequest size={12} className="shrink-0 text-foreground/55" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[11px] text-foreground/85">{item.title}</p>
+                            <p className="font-mono text-[8px] uppercase text-foreground/45">{repo} #{item.number} · {item.pull_request ? 'PR' : 'issue'}</p>
+                          </div>
+                          <button onClick={() => pinGithubItem(item)} className="border border-border/70 px-2 py-1 font-mono text-[8px] uppercase hover:bg-secondary">Pin</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        <div className="flex h-9 items-center border-b border-foreground/14 text-foreground/48">
+          <button onClick={() => setSearchOpen((open) => {
+            if (open) setCardQuery('');
+            return !open;
+          })} className={`flex h-8 w-8 items-center justify-center transition-colors hover:text-foreground ${searchOpen ? 'text-[#245da8]' : ''}`} aria-label="Search cards" title="Search cards">
+            <Search size={13} />
+          </button>
+          <AnimatePresence initial={false}>
+            {searchOpen && (
+              <motion.label initial={{ width: 0, opacity: 0 }} animate={{ width: 190, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="flex min-w-0 items-center overflow-hidden">
+                <input autoFocus aria-label="Search the wall" value={cardQuery} onChange={(event) => setCardQuery(event.target.value)} placeholder="Search the wall…" className="w-[170px] bg-transparent font-mono text-[10px] outline-none placeholder:text-foreground/36" />
+                {cardQuery && <button onClick={() => setCardQuery('')} aria-label="Clear search"><X size={11} /></button>}
+              </motion.label>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
 
       <div className="relative z-[2] mx-auto w-full max-w-[1320px] px-6 pb-3 pt-14 sm:px-10 lg:pt-20">
         <div className="grid items-center gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:gap-14">
@@ -367,7 +687,7 @@ export function HomeDashboard() {
             </h1>
           </header>
 
-          <div className="capture-desk lg:mt-16">
+          <div className="capture-desk relative lg:mt-16">
             {pendingImageUrl && (
               <div className="relative mb-4 w-fit">
                 <img src={pendingImageUrl} alt="New artifact preview" className="max-h-24 max-w-44 border border-border bg-card object-contain p-1" />
@@ -383,7 +703,13 @@ export function HomeDashboard() {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') addArtifact();
+                if (event.key !== 'Enter' || event.shiftKey) return;
+                event.preventDefault();
+                if (event.metaKey || event.ctrlKey) {
+                  setDraftPriority((current) => cyclePriority(current));
+                  return;
+                }
+                addArtifact();
               }}
               placeholder={'Add a thought\nor attach a screenshot…'}
               rows={3}
@@ -407,7 +733,15 @@ export function HomeDashboard() {
                   Attach image
                 </button>
                 <span className="hidden h-5 w-px bg-foreground/10 sm:block" />
-                <span className="hidden items-center gap-1.5 font-mono text-[8px] text-foreground/55 sm:flex"><Command size={10} /> + Enter to pin</span>
+                <button
+                  onClick={() => setDraftPriority((current) => cyclePriority(current))}
+                  className="hidden h-7 items-center gap-2 rounded-full border border-foreground/10 bg-black/[0.025] px-2.5 font-mono text-[8px] uppercase tracking-[0.08em] text-foreground/58 sm:flex"
+                  title="⌘/Ctrl + Enter cycles priority"
+                  aria-label={`Draft priority ${draftPriority}. Command Enter cycles priority.`}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full shadow-[0_1px_2px_rgba(20,24,30,0.24)]" style={{ background: PRIORITY_COLORS[draftPriority] }} />
+                  Priority · {draftPriority}
+                </button>
               </div>
               <button
                 onClick={addArtifact}
@@ -422,7 +756,63 @@ export function HomeDashboard() {
         </div>
       </div>
 
-      <div className="relative z-[3] mt-14 overflow-x-auto overflow-y-hidden pb-16 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mt-12">
+      <LayoutGroup id="studio-focus">
+      <div className="relative z-[3] mx-auto mt-5 h-[88px] w-full max-w-[1320px] px-6 sm:px-10">
+        <AnimatePresence initial={false}>
+          {focusGroups.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 5 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="absolute inset-x-6 top-0 sm:inset-x-10"
+            >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="h-px w-7 bg-[#245da8]/70" />
+                <span className="font-serif text-[18px] italic text-foreground/82">Today</span>
+                <span className="font-mono text-[7px] uppercase tracking-[0.14em] text-foreground/42">{focusGroups.length} of {FOCUS_LIMIT} in focus</span>
+              </div>
+              <span className="hidden font-mono text-[7px] uppercase tracking-[0.1em] text-foreground/32 sm:block">Click a reference to return it to the wall</span>
+            </div>
+            <div className="mt-2 flex max-w-[930px] gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {focusGroups.map((group) => {
+                  const item = group[0];
+                  return (
+                    <motion.button
+                      key={item.id}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      onClick={() => returnToWall(item.id)}
+                      className="group/focus relative flex h-[56px] min-w-[220px] max-w-[300px] flex-1 items-center gap-3 overflow-hidden border border-foreground/10 bg-[#f5f0e7]/88 px-3 text-left shadow-[0_8px_18px_-17px_rgba(20,24,30,0.65)] transition-transform hover:-translate-y-0.5"
+                      title="Return to the wall as P1"
+                      aria-label={`Return ${item.text} to the wall as P1`}
+                    >
+                      <span className="absolute inset-y-0 left-0 w-[2px] bg-[#245da8]" />
+                      <span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-[#245da8]/18 bg-[#245da8]/[0.06] px-2 font-mono text-[7px] uppercase tracking-[0.1em] text-[#245da8]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#245da8]" /> P0
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-serif text-[14px] leading-tight text-foreground/88">{item.text}</span>
+                        <span className="mt-1 flex items-center gap-1.5 font-mono text-[7px] uppercase tracking-[0.08em] text-foreground/38">
+                          <KindMark kind={item.kind ?? 'note'} />
+                          {group.length > 1 ? `${group.length} linked` : 'Active reference'}
+                        </span>
+                      </span>
+                      <RotateCcw size={11} className="shrink-0 text-foreground/28 transition-colors group-hover/focus:text-[#245da8]" />
+                    </motion.button>
+                );
+              })}
+            </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <motion.div
+        className="relative z-[3] mt-5 overflow-x-auto overflow-y-hidden pb-16 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         <div className="clothesline-track relative min-h-[440px]" style={{ width: wallWidth }}>
           <div className="clothesline-cord absolute left-0 right-0 top-[34px]" />
 
@@ -431,30 +821,53 @@ export function HomeDashboard() {
               {wallItems.map((item, index) => {
                 const offset = HANG_OFFSETS[index % HANG_OFFSETS.length];
                 const angle = SETTLE_ANGLES[index % SETTLE_ANGLES.length];
-                const isUserArtifact = 'createdAt' in item;
                 const kind = item.kind ?? 'note';
-                const label = isUserArtifact ? kind : item.label;
-                const meta = isUserArtifact ? 'Just now' : item.meta;
-                const text = isUserArtifact ? formatArtifactText(item) : item.text;
-                const image = isUserArtifact ? item.imageUrl : item.image;
-                const imageAlt = isUserArtifact ? item.text : item.imageAlt;
+                const members = artifactGroups.get(item.stackId ?? item.id) ?? [item];
+                const memberIds = members.map((member) => member.id);
+                const priority = item.priority ?? 'p2';
+                const label = item.kind === 'github' ? item.sourceType ?? 'GitHub' : kind;
+                const meta = item.kind === 'github' ? `${item.sourceRepo?.split('/').pop() ?? 'repo'} #${item.sourceNumber}` : 'Just now';
+                const text = formatArtifactText(item);
+                const image = item.imageUrl;
+                const imageAlt = item.text;
+                const searchText = `${label} ${meta} ${text ?? ''}`.toLowerCase();
+                const mutedBySearch = Boolean(cardQuery.trim()) && !searchText.includes(cardQuery.trim().toLowerCase());
 
                 return (
-                  <div key={item.id} className="relative w-[250px] shrink-0" style={{ paddingTop: 40 + offset }}>
+                  <motion.div
+                    key={item.id}
+                    layout="position"
+                    transition={{ layout: { duration: 0.52, ease: [0.22, 1, 0.36, 1] } }}
+                    className="relative w-[250px] shrink-0"
+                    style={{ paddingTop: 40 + offset }}
+                  >
+                    {members.length > 1 && (
+                      <>
+                        <div className="studio-card absolute left-2 z-[4] h-[306px] w-[250px] rotate-[2.4deg] bg-[#e9e1d4]" style={{ top: 44 + offset }} />
+                        <div className="studio-card absolute -left-1 z-[5] h-[306px] w-[250px] -rotate-[1.7deg] bg-[#efe8dc]" style={{ top: 40 + offset }} />
+                      </>
+                    )}
                     <div aria-hidden="true" className="binder-clip absolute left-1/2 z-20 -translate-x-1/2" style={{ top: 20 + offset }}>
                       <span className="binder-handle binder-handle-back" />
                       <span className="binder-handle binder-handle-front" />
                     </div>
                     <motion.div
                       layout
-                      initial={isUserArtifact ? { opacity: 0, y: -10, rotate: angle * 2 } : false}
+                      initial={returningFocusId === item.id
+                        ? { opacity: 0, y: -72, scale: 0.94, rotate: 0 }
+                        : { opacity: 0, y: -10, scale: 1, rotate: angle * 2 }}
                       animate={discardingId === item.id
                         ? { opacity: 0 }
-                        : { opacity: draggingId === item.id ? 0 : 1, y: 0, rotate: angle }}
+                        : { opacity: draggingId === item.id ? 0 : mutedBySearch ? 0.22 : 1, y: mutedBySearch ? 2 : cardQuery ? -6 : 0, scale: 1, rotate: angle, filter: mutedBySearch ? 'saturate(0.35) blur(0.45px)' : 'saturate(1) blur(0px)' }}
                       exit={{ opacity: 0, y: 12, rotate: angle * 1.4 }}
                       transition={discardingId === item.id
                         ? { duration: 0.12, ease: 'easeOut' }
-                        : { duration: 0 }}
+                        : returningFocusId === item.id
+                          ? { duration: 0.46, delay: 0.18, ease: [0.22, 1, 0.36, 1], layout: { duration: 0.46, ease: [0.22, 1, 0.36, 1] } }
+                          : { duration: 0, layout: { duration: 0.52, ease: [0.22, 1, 0.36, 1] } }}
+                      onAnimationComplete={() => {
+                        if (returningFocusId === item.id) setReturningFocusId(undefined);
+                      }}
                       className="pointer-events-none relative z-20 w-[250px]"
                       style={{ transformOrigin: '50% 0' }}
                     >
@@ -462,11 +875,24 @@ export function HomeDashboard() {
                         kind={kind}
                         label={label}
                         meta={meta}
+                        priority={priority}
                         text={text}
                         image={image}
                         imageAlt={imageAlt}
                       />
                     </motion.div>
+                    <button
+                      onClick={() => cycleArtifactPriority(item.id)}
+                      className="absolute left-4 z-30 h-6 w-[48px] rounded-full bg-transparent"
+                      style={{ top: 52 + offset }}
+                      title={`${priority.toUpperCase()} priority · click to cycle`}
+                      aria-label={`${priority.toUpperCase()} priority. Click to cycle.`}
+                    />
+                    {members.length > 1 && (
+                      <span className="absolute right-3 z-30 flex h-6 items-center gap-1 rounded-full border border-foreground/10 bg-[#f5f0e7] px-2 font-mono text-[8px] uppercase shadow-sm" style={{ top: 48 + offset }}>
+                        <Link2 size={9} /> {members.length}
+                      </span>
+                    )}
                     <motion.div
                       ref={(element) => {
                         if (element) dragProxyRefs.current.set(item.id, element);
@@ -484,32 +910,34 @@ export function HomeDashboard() {
                         const position = { x: bounds.left, y: bounds.top };
                         setDraggingId(item.id);
                         setDragAtShredder(false);
+                        setDragAtArchive(false);
                         dragOriginRef.current = position;
                         previewX.set(position.x);
                         previewY.set(position.y);
-                        setDragPreview({ id: item.id, kind, label, meta, text, image, imageAlt, angle });
+                        setDragPreview({ id: item.id, kind, label, meta, text, image, imageAlt, angle, priority, memberIds });
                       }}
                       onDrag={(_event, info) => updateDrag(item.id, info)}
                       onDragEnd={(_event, info) => finishDrag(item.id, info)}
                       className="absolute left-0 z-10 h-[306px] w-[250px] cursor-grab touch-none active:cursor-grabbing"
                       style={{ top: 40 + offset }}
                     />
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
           </AnimatePresence>
         </div>
-      </div>
+      </motion.div>
+      </LayoutGroup>
 
       {dragPreview && !discardingId && createPortal(
         <motion.div
           key={dragPreview.id}
           initial={false}
-          animate={dragAtShredder ? {
-            scaleX: 0.72,
-            scaleY: 0.72,
-            rotate: 0,
+          animate={dragAtShredder || dragAtArchive ? {
+            scaleX: dragAtArchive ? 0.64 : 0.72,
+            scaleY: dragAtArchive ? 0.64 : 0.72,
+            rotate: dragAtArchive ? -3 : 0,
             opacity: 1,
           } : {
             scaleX: 1,
@@ -517,7 +945,7 @@ export function HomeDashboard() {
             rotate: dragPreview.angle,
             opacity: 1,
           }}
-          transition={{ duration: dragAtShredder ? 0.16 : 0.08, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: dragAtShredder || dragAtArchive ? 0.16 : 0.08, ease: [0.22, 1, 0.36, 1] }}
           className={dragAtShredder ? 'shredding-sheet' : ''}
           style={{ position: 'fixed', left: 0, top: 0, x: previewX, y: previewY, zIndex: 1000, width: 250, pointerEvents: 'none', transformOrigin: '50% 50%' }}
         >
@@ -525,11 +953,52 @@ export function HomeDashboard() {
             kind={dragPreview.kind}
             label={dragPreview.label}
             meta={dragPreview.meta}
+            priority={dragPreview.priority}
             text={dragPreview.text}
             image={dragPreview.image}
             imageAlt={dragPreview.imageAlt}
           />
         </motion.div>,
+        document.body
+      )}
+
+      {isReady && createPortal(
+        <>
+          <button
+            ref={archiveRef}
+            onClick={() => setArchiveOpen((open) => !open)}
+            className={`fixed bottom-0 left-5 z-[55] flex h-8 w-[86px] items-center justify-center gap-2 border border-b-0 border-border/80 bg-card/95 text-foreground shadow-[0_-5px_14px_-12px_rgba(20,31,42,0.5)] transition-transform lg:left-[284px] ${dragAtArchive ? 'h-11 -translate-y-1' : ''}`}
+            aria-label="Open archive drawer"
+          >
+            <Archive size={12} />
+            <span className="font-mono text-[7px] uppercase tracking-[0.12em]">archive {archivedArtifacts.length}</span>
+          </button>
+          <AnimatePresence>
+            {archiveOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="fixed bottom-10 left-5 z-[60] w-[310px] border border-border/80 bg-card p-3 text-card-foreground shadow-[0_22px_46px_-24px_rgba(20,24,30,0.65)] lg:left-[284px]"
+              >
+                <div className="mb-2 flex items-center justify-between font-mono text-[8px] uppercase tracking-[0.14em] text-foreground/55">
+                  <span>Archive drawer</span>
+                  <button onClick={() => setArchiveOpen(false)} aria-label="Close archive"><X size={12} /></button>
+                </div>
+                <div className="max-h-64 space-y-1 overflow-y-auto">
+                  {archivedArtifacts.length === 0 && <p className="py-5 text-center font-mono text-[9px] text-foreground/38">Nothing filed away.</p>}
+                  {archivedArtifacts.map((artifact) => (
+                    <div key={artifact.id} className="flex items-center gap-2 border-t border-foreground/8 py-2">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: PRIORITY_COLORS[artifact.priority ?? 'p2'] }} />
+                      <span className="min-w-0 flex-1 truncate text-[11px]">{artifact.text}</span>
+                      <button onClick={() => restoreArtifacts(artifact.stackId ? archivedArtifacts.filter((item) => item.stackId === artifact.stackId).map((item) => item.id) : [artifact.id])} className="flex h-7 w-7 items-center justify-center border border-border/70 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" title="Restore"><RotateCcw size={11} /></button>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>,
         document.body
       )}
 
@@ -550,7 +1019,7 @@ export function HomeDashboard() {
               initial={{ y: -62, opacity: 0, scale: 0.78, rotate: dragPreview.angle }}
               animate={{ y: [-62, -28, 92, 224], opacity: [0, 1, 1, 0], scale: [0.78, 0.78, 0.76, 0.7], rotate: [dragPreview.angle, 0, 0, 0] }}
               transition={{ duration: 1.62, times: [0, 0.1, 0.5, 0.7], ease: [0.4, 0, 0.75, 1] }}
-              onAnimationComplete={() => removeArtifact(dragPreview.id, artifacts.some((artifact) => artifact.id === dragPreview.id))}
+              onAnimationComplete={() => removeArtifact(dragPreview.memberIds)}
               className="absolute left-1/2 top-0 z-0 w-[250px] -translate-x-1/2 origin-top"
             >
               <StudioCard {...dragPreview} />
@@ -568,7 +1037,7 @@ export function HomeDashboard() {
               </div>
               <div className="absolute inset-x-0 bottom-0 h-[96px] rounded-b-[26px] border border-[#183047]/20 bg-[#eee7dc] shadow-[0_22px_38px_-24px_rgba(20,31,42,0.65)]">
                 <div className="absolute left-1/2 top-5 h-2 w-[242px] -translate-x-1/2 rounded-full bg-[#183047]/70" />
-                <div className="absolute inset-x-0 bottom-5 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#183047]/70">shredding reference</div>
+                <div className="absolute inset-x-0 bottom-5 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#183047]/70">shredding {dragPreview.memberIds.length > 1 ? `${dragPreview.memberIds.length} linked references` : 'reference'}</div>
               </div>
             </motion.div>
 

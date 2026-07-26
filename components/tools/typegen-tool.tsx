@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Boxes } from 'lucide-react';
 import { ToolCard, ToolTextarea, ToolBar, EmptyState, ToolChip } from '@/components/tool-card';
 import { CopyButton } from '@/components/copy-button';
+import { CodeHighlight } from '@/components/code-highlight';
 import { jsonToTypeScript, jsonToZod, sampleMock } from '@/lib/json-to-ts';
 
 type OutputKind = 'typescript' | 'zod' | 'mock' | 'factory' | 'msw';
@@ -122,9 +123,11 @@ export default function TypegenTool() {
           {result.error ? (
             <div className="flex-1 p-5 text-sm text-destructive font-mono">{result.error}</div>
           ) : result.text ? (
-            <pre className="flex-1 p-5 text-sm font-mono overflow-auto whitespace-pre-wrap leading-7">
-              {result.text}
-            </pre>
+            <CodeHighlight
+              code={result.text}
+              language={kind === 'mock' ? 'json' : 'typescript'}
+              className="flex-1 p-5"
+            />
           ) : (
             <EmptyState
               icon={Boxes}
