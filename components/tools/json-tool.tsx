@@ -427,6 +427,33 @@ export default function JsonTool() {
 
   return (
     <div className="w-full">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,.txt,.log,application/json,text/plain"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+          e.target.value = '';
+        }}
+      />
+
+      <div className="mb-7 flex items-start justify-between gap-5">
+        <div>
+          <h2 className="text-[28px] font-bold leading-tight tracking-[-0.035em] text-foreground">JSON input</h2>
+          <p className="mt-1 text-[16px] text-foreground/78">Paste a payload, drop a file, or upload JSON to format and inspect it.</p>
+        </div>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="gum-button hidden h-12 items-center gap-2 px-5 text-[15px] font-semibold sm:inline-flex"
+          title="Upload JSON file"
+        >
+          <Upload size={18} />
+          Upload
+        </button>
+      </div>
+
       <AnimatePresence mode="wait">
         {!showOutput ? (
           <motion.div 
@@ -438,7 +465,7 @@ export default function JsonTool() {
             className="flex flex-col"
           >
             <div
-              className={`surface-panel relative rounded-2xl overflow-hidden flex flex-col h-full min-h-80 lg:min-h-[560px] transition-colors duration-200 ${
+              className={`surface-panel relative flex h-full min-h-80 flex-col overflow-hidden rounded-[4px] transition-colors duration-200 lg:min-h-[640px] ${
                 isDragging ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
               }`}
               onDragOver={(e) => {
@@ -474,33 +501,6 @@ export default function JsonTool() {
                 )}
               </AnimatePresence>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json,.txt,.log,application/json,text/plain"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFile(file);
-                  e.target.value = '';
-                }}
-              />
-
-              <div className="flex items-center justify-between gap-4 border-b border-border/50 bg-card px-5 py-3.5">
-                <div>
-                  <h3 className="text-sm font-semibold tracking-tight text-foreground">JSON input</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">Paste a payload, drop a file, or upload JSON to format and inspect it.</p>
-                </div>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="hidden sm:inline-flex items-center gap-2 rounded-xl border border-border bg-secondary px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/35 hover:bg-secondary/80 active:scale-95"
-                  title="Upload JSON file"
-                >
-                  <Upload size={16} />
-                  Upload
-                </button>
-              </div>
-
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -516,10 +516,10 @@ export default function JsonTool() {
                   }, 0);
                 }}
                 placeholder={`Paste JSON or drop a .json file...\n\n{\n  "name": "John",\n  "age": 30\n}`}
-                className="flex-1 bg-background/35 p-5 font-mono text-[13.5px] resize-none focus:outline-none placeholder-muted-foreground/55 leading-7"
+                className="flex-1 resize-none bg-card p-6 font-mono text-[14px] leading-8 placeholder:text-muted-foreground/55 focus:outline-none"
               />
 
-              <div className="border-t border-border/50 bg-card px-5 py-3.5 flex items-center justify-between gap-5">
+              <div className="flex items-center justify-between gap-5 border-t border-border bg-card px-5 py-4">
                 <div className="flex items-center gap-2 min-w-0">
                   {parseError && <AlertCircle size={16} className="text-destructive shrink-0" />}
                   {isValidating && !parseError && (
@@ -589,7 +589,7 @@ export default function JsonTool() {
                   {input && stats && !parseError && (
                     <button
                       onClick={() => setShowOutput(!showOutput)}
-                      className="ml-2 px-5 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+                      className="gum-button ml-2 flex items-center gap-2 px-5 py-2.5 text-sm font-semibold"
                     >
                       Format <ChevronRight size={14} className={`transition-transform ${showOutput ? 'rotate-90' : ''}`} />
                     </button>
@@ -600,7 +600,7 @@ export default function JsonTool() {
                         const isValid = validateJSON(input);
                         if (isValid) setShowOutput(true);
                       }}
-                      className="ml-2 px-4 py-2.5 rounded-2xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+                      className="gum-button ml-2 px-4 py-2.5 text-sm font-semibold"
                     >
                       Validate
                     </button>

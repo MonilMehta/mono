@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { getCardShadow } from '@/lib/theme';
 
+const THEME_KEY = 'mono-theme';
+
 interface ThemeContextValue {
   isDark: boolean;
   toggleTheme: () => void;
@@ -25,7 +27,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [hasMounted, setHasMounted] = useState(false);
 
   useEffect(() => {
-    applyTheme(false);
+    const savedTheme = window.localStorage.getItem(THEME_KEY);
+    const dark = savedTheme === 'dark';
+    setIsDark(dark);
+    applyTheme(dark);
     setHasMounted(true);
   }, []);
 
@@ -33,6 +38,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setIsDark((prev) => {
       const next = !prev;
       applyTheme(next);
+      window.localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
       return next;
     });
   };

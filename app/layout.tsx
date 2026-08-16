@@ -42,7 +42,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable}`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: "try{var t=localStorage.getItem('mono-theme');document.documentElement.classList.toggle('dark',t==='dark');document.documentElement.classList.toggle('light',t!=='dark')}catch(e){}" }} />
+      </head>
       <body className="font-sans antialiased bg-background text-foreground min-h-screen">
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
