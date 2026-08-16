@@ -1,6 +1,6 @@
 # mono
 
-**mono** is a fast, keyboard-first utility app for everyday dev work — JSON inspection, API helpers, image tools, Expo assets, and more. Everything runs in your browser. Nothing you paste leaves your machine.
+**mono** is a fast, keyboard-first utility app for everyday dev work — JSON inspection, API helpers, image tools, Expo assets, and more. Most tools run entirely in your browser; shareable mock API responses are encoded in their generated endpoint URL.
 
 <p align="center">
   <img src="public/logo.svg" alt="mono" width="48" height="48" />
@@ -8,7 +8,7 @@
 
 ## Why mono
 
-- **16 tools, one place** — format JSON, decode JWTs, convert CSV, generate types and mocks from API responses, inspect diagnostics, build deep links, and more
+- **17 tools, one place** — format JSON, decode JWTs, convert CSV, generate types and mock endpoints, inspect diagnostics, build deep links, and more
 - **Keyboard-first** — jump anywhere with `⌘K`, cycle tools with `⌘]` / `⌘[`, collapse the sidebar with `⌘B`
 - **Private by design** — no accounts, no uploads to a server; processing happens entirely client-side
 - **Built for real payloads** — debounced parsing, paginated tree views, and drag-and-drop for large JSON and images
@@ -58,6 +58,7 @@ Switch tools via URL:
 | **CSV** | CSV/TSV ↔ JSON, JSON → Markdown tables |
 | **Schema & Mocks** | JSON → TypeScript, Zod, mock data, factories, or MSW handlers |
 | **cURL** | curl → fetch, Axios, Python, undici, React Query, RN fetch |
+| **Mock API** | Generate a shareable endpoint with custom GET, POST, and PATCH JSON responses |
 
 ### Media
 | Tool | Description |
@@ -115,7 +116,7 @@ The sidebar, palette, and shortcuts pick it up automatically.
 
 ## Privacy
 
-All processing runs in your browser. Payloads, tokens, images, and files are never sent to a backend. In production, [Vercel Analytics](https://vercel.com/analytics) records page views only.
+Most processing runs in your browser. Payloads, tokens, images, and files are never sent to a backend. Mock API response bodies are the exception: they are encoded into the generated URL and decoded when that endpoint is requested, so mock URLs should not contain secrets. In production, [Vercel Analytics](https://vercel.com/analytics) records page views only.
 
 ## License
 

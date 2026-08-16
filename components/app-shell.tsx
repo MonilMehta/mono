@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState, type ComponentType } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, X, Home, Timer } from 'lucide-react';
+import { Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, X, Home } from 'lucide-react';
 import { ThemeProvider, useTheme } from '@/components/theme-provider';
 import { CommandPalette } from '@/components/command-palette';
 import { MonoLogo } from '@/components/mono-logo';
@@ -24,6 +24,7 @@ import CsvTool from '@/components/tools/csv-tool';
 import TypegenTool from '@/components/tools/typegen-tool';
 import CurlTool from '@/components/tools/curl-tool';
 import LogTool from '@/components/tools/log-tool';
+import MockApiTool from '@/components/tools/mock-api-tool';
 import { HomeDashboard } from '@/components/home-dashboard';
 
 const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
@@ -43,13 +44,15 @@ const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   typegen: TypegenTool,
   curl: CurlTool,
   log: LogTool,
+  'mock-api': MockApiTool,
 };
 
 const NAV_GROUPS: { label: string; ids: ToolId[] }[] = [
-  { label: 'Capture', ids: ['json', 'curl', 'typegen', 'image', 'svg', 'csv'] },
+  { label: 'Capture', ids: ['json', 'curl', 'mock-api', 'typegen', 'image', 'svg', 'csv'] },
   { label: 'Tools', ids: ['blurhash', 'color', 'app-asset', 'deeplink'] },
   { label: 'More', ids: ['base64', 'timestamp', 'url', 'diff', 'regex', 'log'] },
 ];
+const NAV_TOOL_IDS = NAV_GROUPS.flatMap((group) => group.ids);
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -66,9 +69,12 @@ function AppShellInner() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const current = TOOLS.find((t) => t.id === activeTool) ?? TOOLS[0];
+  const activeToolRef = useRef<ToolId | null>(isHome ? null : current.id);
 
   const setTool = useCallback(
     (id: ToolId) => {
+      activeToolRef.current = id;
       router.push(`/?tool=${id}`, { scroll: false });
       setSidebarOpen(false);
     },
@@ -76,24 +82,25 @@ function AppShellInner() {
   );
 
   const goHome = useCallback(() => {
+    activeToolRef.current = null;
     router.push('/', { scroll: false });
     setSidebarOpen(false);
   }, [router]);
 
-  const goFocus = useCallback(() => {
-    router.push('/focus');
-    setSidebarOpen(false);
-  }, [router]);
-
-  const current = TOOLS.find((t) => t.id === activeTool) ?? TOOLS[0];
   const ToolComponent = TOOL_COMPONENTS[current.id];
-  const currentIndex = TOOLS.findIndex((t) => t.id === current.id);
+
+  useEffect(() => {
+    activeToolRef.current = isHome ? null : current.id;
+  }, [current.id, isHome]);
+
   const cycleTool = useCallback(
     (dir: 1 | -1) => {
-      const next = TOOLS[(currentIndex + dir + TOOLS.length) % TOOLS.length];
-      setTool(next.id);
+      const activeId = activeToolRef.current;
+      const currentIndex = activeId ? NAV_TOOL_IDS.indexOf(activeId) : dir === 1 ? -1 : 0;
+      const nextIndex = (currentIndex + dir + NAV_TOOL_IDS.length) % NAV_TOOL_IDS.length;
+      setTool(NAV_TOOL_IDS[nextIndex]);
     },
-    [currentIndex, setTool]
+    [setTool]
   );
 
   useEffect(() => {
@@ -135,24 +142,23 @@ function AppShellInner() {
       {/* Sidebar */}
       <aside
         className={`sidebar-rail fixed left-0 top-0 z-40 flex h-dvh flex-col border-r border-sidebar-border transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:sticky ${
-          sidebarOpen ? 'w-[260px] translate-x-0' : '-translate-x-full lg:translate-x-0'
-        } ${!sidebarOpen ? (railCollapsed ? 'lg:w-[64px]' : 'lg:w-[260px]') : ''}`}
+          sidebarOpen ? 'w-[280px] translate-x-0' : '-translate-x-full lg:translate-x-0'
+        } ${!sidebarOpen ? (railCollapsed ? 'lg:w-[72px]' : 'lg:w-[280px]') : ''}`}
       >
         {/* Brand */}
         <div
-          className={`flex h-[54px] shrink-0 items-center ${
-            railCollapsed ? 'justify-center px-2' : 'px-4 gap-3'
+          className={`flex h-[64px] shrink-0 items-center ${
+            railCollapsed ? 'justify-center px-2' : 'gap-3 px-5'
           }`}
         >
           <button onClick={goHome} className="flex min-w-0 items-center gap-3 text-left" title="Go to home">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[3px] bg-foreground text-background shadow-sm">
-              <MonoLogo className="h-4 w-4" />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] bg-sidebar-foreground text-sidebar">
+              <MonoLogo className="h-[18px] w-[18px]" />
             </div>
             {!railCollapsed && (
               <div className="min-w-0 flex-1 overflow-hidden">
                 <h1
-                  className="text-[20px] font-semibold leading-none tracking-[-0.035em] text-sidebar-foreground"
-                  style={{ fontFamily: 'var(--font-playfair), serif', fontStyle: 'italic' }}
+                  className="text-[28px] font-bold leading-none tracking-[-0.055em] text-sidebar-foreground"
                 >
                   mono
                 </h1>
@@ -161,7 +167,7 @@ function AppShellInner() {
           </button>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden p-1.5 text-muted-foreground hover:bg-sidebar-accent rounded-lg"
+            className="rounded-[3px] p-1.5 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground lg:hidden"
           >
             <X size={15} />
           </button>
@@ -169,14 +175,14 @@ function AppShellInner() {
 
         {/* Quick search */}
         {!railCollapsed && (
-          <div className="px-3 pb-2">
+          <div className="px-4 pb-3">
             <button
               onClick={() => setPaletteOpen(true)}
-              className="flex h-8 w-full items-center gap-2.5 rounded-[3px] border border-sidebar-border bg-background/45 px-2.5 text-left text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground"
+              className="flex h-11 w-full items-center gap-3 rounded-[4px] border border-sidebar-border bg-white/[0.04] px-3 text-left text-sidebar-foreground/65 transition-colors hover:border-sidebar-foreground/50 hover:text-sidebar-foreground"
             >
-              <Search size={13} className="shrink-0 opacity-70" />
-              <span className="flex-1 font-mono text-[10px] uppercase tracking-[0.06em]">Find a tool</span>
-              <kbd className="border border-border bg-secondary/70 px-1.5 py-0.5 font-mono text-[8px]">⌘K</kbd>
+              <Search size={17} className="shrink-0" />
+              <span className="flex-1 text-[14px]">Find a tool</span>
+              <kbd className="border border-sidebar-border bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-sidebar-foreground">⌘K</kbd>
             </button>
           </div>
         )}
@@ -185,7 +191,7 @@ function AppShellInner() {
           <div className="px-2 pb-2">
             <button
               onClick={() => setPaletteOpen(true)}
-              className="flex h-8 w-full items-center justify-center rounded-[3px] border border-sidebar-border bg-background/45 text-muted-foreground transition-colors hover:text-foreground"
+              className="flex h-10 w-full items-center justify-center rounded-[3px] border border-sidebar-border bg-white/[0.04] text-sidebar-foreground/65 transition-colors hover:text-sidebar-foreground"
               title="Search (⌘K)"
             >
               <Search size={14} />
@@ -194,54 +200,42 @@ function AppShellInner() {
         )}
 
         {/* Nav */}
-        <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 ${railCollapsed ? 'px-2' : 'px-2.5'}`}>
+        <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${railCollapsed ? 'px-2' : 'px-3'}`}>
           <div className="mb-4 space-y-0.5">
             <button
               onClick={goHome}
               title="Home"
               className={`group relative flex w-full items-center rounded-[3px] text-left transition-all duration-150 ${
-                railCollapsed ? 'h-9 justify-center' : 'h-8 gap-2 px-2'
+                railCollapsed ? 'h-9 justify-center' : 'h-9 gap-3 px-3'
               } ${
                 isHome
                   ? 'bg-sidebar-accent text-sidebar-foreground'
-                  : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground'
+                  : 'text-sidebar-foreground/72 hover:bg-sidebar-accent hover:text-sidebar-foreground'
               }`}
             >
               {isHome && (
                 <motion.span
                   layoutId="active-rail"
-                  className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 bg-primary"
+                  className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 bg-primary"
                   transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 />
               )}
               <span className={`flex h-6 w-6 shrink-0 items-center justify-center transition-colors ${
                 isHome
                   ? 'text-primary'
-                  : 'text-muted-foreground group-hover:text-foreground'
+                  : 'text-sidebar-foreground/62 group-hover:text-sidebar-foreground'
               }`}>
-                <Home size={14} strokeWidth={isHome ? 2.25 : 1.85} />
+                <Home size={16} strokeWidth={isHome ? 2.25 : 1.85} />
               </span>
-              {!railCollapsed && <span className={`truncate text-[11px] ${isHome ? 'font-semibold' : 'font-medium'}`}>Studio wall</span>}
-            </button>
-            <button
-              onClick={goFocus}
-              title="Focus room"
-              className={`group relative flex w-full items-center rounded-[3px] text-left text-sidebar-foreground/65 transition-all duration-150 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground ${
-                railCollapsed ? 'h-9 justify-center' : 'h-8 gap-2 px-2'
-              }`}
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-foreground">
-                <Timer size={14} strokeWidth={1.85} />
-              </span>
-              {!railCollapsed && <span className="truncate text-[11px] font-medium">Focus room</span>}
+              {!railCollapsed && <span className={`truncate text-[13px] ${isHome ? 'font-semibold' : 'font-medium'}`}>Home</span>}
             </button>
           </div>
           {NAV_GROUPS.map((group, groupIndex) => {
             const tools = group.ids.map((id) => TOOLS.find((tool) => tool.id === id)).filter((tool): tool is (typeof TOOLS)[number] => Boolean(tool));
             return (
-              <div key={group.label} className={`${groupIndex > 0 ? 'mt-5 border-t border-sidebar-border/55 pt-4' : ''}`}>
+              <div key={group.label} className={`${groupIndex > 0 ? 'mt-3 border-t border-sidebar-border pt-3' : ''}`}>
                 {!railCollapsed ? (
-                  <p className="mb-1.5 px-2 font-mono text-[8px] uppercase tracking-[0.15em] text-muted-foreground/65">
+                  <p className="mb-1.5 px-3 text-[10px] font-medium uppercase tracking-[0.05em] text-sidebar-foreground/55">
                     {group.label}
                   </p>
                 ) : (
@@ -257,17 +251,17 @@ function AppShellInner() {
                         onClick={() => setTool(tool.id)}
                         title={tool.label}
                         className={`group relative flex w-full items-center rounded-[3px] text-left transition-all duration-150 ${
-                          railCollapsed ? 'h-9 justify-center' : 'h-8 gap-2 px-2'
+                          railCollapsed ? 'h-9 justify-center' : 'h-9 gap-3 px-3'
                         } ${
                           isActive
                             ? 'bg-sidebar-accent text-sidebar-foreground'
-                            : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground'
+                            : 'text-sidebar-foreground/72 hover:bg-sidebar-accent hover:text-sidebar-foreground'
                         }`}
                       >
                         {isActive && (
                           <motion.span
                             layoutId="active-rail"
-                            className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 bg-primary"
+                            className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 bg-primary"
                             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                           />
                         )}
@@ -275,13 +269,13 @@ function AppShellInner() {
                           className={`flex h-6 w-6 shrink-0 items-center justify-center transition-colors ${
                             isActive
                               ? 'text-primary'
-                              : 'text-muted-foreground group-hover:text-foreground'
+                              : 'text-sidebar-foreground/62 group-hover:text-sidebar-foreground'
                           }`}
                         >
-                          <Icon size={14} strokeWidth={isActive ? 2.25 : 1.85} />
+                          <Icon size={16} strokeWidth={isActive ? 2.25 : 1.85} />
                         </span>
                         {!railCollapsed && (
-                          <span className={`truncate text-[11px] ${isActive ? 'font-semibold' : 'font-medium'}`}>
+                          <span className={`truncate text-[13px] ${isActive ? 'font-semibold text-primary' : 'font-medium'}`}>
                             {tool.label}
                           </span>
                         )}
@@ -295,11 +289,11 @@ function AppShellInner() {
         </nav>
 
         {/* Footer */}
-        <div className="shrink-0 border-t border-sidebar-border/60 p-2.5">
+        <div className="shrink-0 border-t border-sidebar-border p-3">
           <div className={`flex ${railCollapsed ? 'flex-col items-center gap-1' : 'items-center gap-1'}`}>
             <button
               onClick={toggleTheme}
-              className="flex h-8 w-8 items-center justify-center rounded-[3px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+              className="flex h-10 w-10 items-center justify-center rounded-[3px] text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
               title="Toggle theme"
             >
               <Moon size={14} className="dark:hidden" />
@@ -307,7 +301,7 @@ function AppShellInner() {
             </button>
             <button
               onClick={() => setCollapsed((c) => !c)}
-              className={`hidden h-8 items-center justify-center rounded-[3px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground lg:flex ${
+              className={`hidden h-10 items-center justify-center rounded-[3px] text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground lg:flex ${
                 railCollapsed ? 'w-9' : 'flex-1 gap-2 px-2.5'
               }`}
               title={railCollapsed ? 'Expand sidebar (⌘B)' : 'Collapse sidebar (⌘B)'}
@@ -317,7 +311,7 @@ function AppShellInner() {
               ) : (
                 <>
                   <PanelLeftClose size={15} />
-                  <span className="text-xs font-medium">Collapse</span>
+                  <span className="text-sm font-medium">Collapse</span>
                 </>
               )}
             </button>
@@ -340,7 +334,7 @@ function AppShellInner() {
 
       <button
         onClick={() => setSidebarOpen(true)}
-        className="surface-muted fixed left-3 top-3 z-30 flex h-9 w-9 items-center justify-center rounded-[3px] text-muted-foreground shadow-sm hover:text-foreground lg:hidden"
+        className="fixed left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-[3px] border border-sidebar-border bg-sidebar text-sidebar-foreground shadow-[3px_3px_0_#a78bfa] lg:hidden"
         aria-label="Open sidebar"
       >
         <Menu size={18} />
@@ -348,18 +342,10 @@ function AppShellInner() {
 
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col min-h-dvh">
-        <main className={isHome ? 'flex-1 w-full' : 'flex-1 w-full max-w-[1180px] px-4 py-5 sm:px-6 sm:py-7 lg:px-8'}>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={isHome ? 'home' : current.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {isHome ? <HomeDashboard /> : <ToolComponent />}
-            </motion.div>
-          </AnimatePresence>
+        <main className={isHome ? 'flex-1 w-full' : 'mx-auto flex-1 w-full max-w-[1500px] px-4 pb-6 pt-16 sm:px-7 sm:py-8 lg:px-12 lg:py-10'}>
+          <div key={isHome ? 'home' : current.id} className="tool-page-enter">
+            {isHome ? <HomeDashboard /> : <ToolComponent />}
+          </div>
         </main>
       </div>
     </div>

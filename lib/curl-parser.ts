@@ -6,6 +6,35 @@ export interface ParsedCurl {
   query: Record<string, string>;
 }
 
+const BROWSER_RESTRICTED_HEADERS = new Set([
+  'accept-encoding', 'connection', 'content-length', 'cookie',
+  'host', 'origin', 'referer', 'user-agent',
+]);
+
+export function curlToBrowserRequest(parsed: ParsedCurl): {
+  url: string;
+  init: RequestInit;
+  omittedHeaders: string[];
+} {
+  const method = parsed.method.toUpperCase();
+  if ((method === 'GET' || method === 'HEAD') && parsed.body !== null) {
+    throw new Error(`Browsers cannot send a body with ${method} requests.`);
+  }
+
+  const omittedHeaders: string[] = [];
+  const headers = Object.fromEntries(Object.entries(parsed.headers).filter(([name]) => {
+    if (!BROWSER_RESTRICTED_HEADERS.has(name.toLowerCase())) return true;
+    omittedHeaders.push(name);
+    return false;
+  }));
+
+  return {
+    url: parsed.url,
+    init: { method, headers, body: parsed.body ?? undefined, credentials: 'omit' },
+    omittedHeaders,
+  };
+}
+
 function unquote(s: string): string {
   if ((s.startsWith("'") && s.endsWith("'")) || (s.startsWith('"') && s.endsWith('"'))) {
     return s.slice(1, -1);

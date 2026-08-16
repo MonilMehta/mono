@@ -16,6 +16,7 @@ import {
   FileCode2,
   Terminal,
   ScrollText,
+  Server,
 } from 'lucide-react';
 
 export type ToolId =
@@ -34,7 +35,8 @@ export type ToolId =
   | 'csv'
   | 'typegen'
   | 'curl'
-  | 'log';
+  | 'log'
+  | 'mock-api';
 
 export interface ToolDef {
   id: ToolId;
@@ -50,6 +52,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'diff', label: 'Diff', description: 'Compare two texts', category: 'data', icon: GitCompare, keywords: ['compare', 'changes'] },
   { id: 'csv', label: 'CSV', description: 'CSV ↔ JSON ↔ Markdown', category: 'data', icon: Table2, keywords: ['tsv', 'table', 'spreadsheet', 'markdown'] },
   { id: 'typegen', label: 'Schema & Mocks', description: 'Types, schemas & API mocks', category: 'data', icon: FileCode2, keywords: ['typescript', 'interface', 'zod', 'mock', 'factory', 'msw', 'api'] },
+  { id: 'mock-api', label: 'Mock API', description: 'Shareable GET, POST & PATCH endpoints', category: 'data', icon: Server, keywords: ['http', 'endpoint', 'response', 'server'] },
   { id: 'curl', label: 'cURL', description: 'cURL → fetch, Axios, RN', category: 'data', icon: Terminal, keywords: ['http', 'axios', 'fetch', 'python', 'undici'] },
   { id: 'image', label: 'Image', description: 'Inspect, compress & convert', category: 'media', icon: ImageIcon, keywords: ['png', 'jpg', 'webp', 'compress', 'resize'] },
   { id: 'svg', label: 'SVG', description: 'Preview, minify & export', category: 'media', icon: PenTool, keywords: ['vector', 'icon', 'jsx', 'react-native'] },

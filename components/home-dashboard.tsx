@@ -1,7 +1,7 @@
 'use client';
 
 import { animate, AnimatePresence, LayoutGroup, motion, type PanInfo, useMotionValue } from 'framer-motion';
-import { Archive, ArrowUp, Braces, FileText, GitPullRequest, ImagePlus, Link2, Paperclip, PenTool, RotateCcw, Search, Terminal, X } from 'lucide-react';
+import { Archive, ArrowUp, Braces, CheckCircle2, ExternalLink, FileText, GitPullRequest, ImagePlus, Link2, Paperclip, PenTool, RotateCcw, Search, Terminal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -16,6 +16,7 @@ type ArtifactRecord = {
   kind?: ArtifactKind;
   priority?: Priority;
   archived?: boolean;
+  completed?: boolean;
   stackId?: string;
   sourceUrl?: string;
   sourceRepo?: string;
@@ -45,7 +46,14 @@ type GitHubResult = {
   repository_url: string;
   number: number;
   pull_request?: unknown;
+  section: 'review' | 'assigned' | 'authored';
 };
+
+const GITHUB_SECTIONS = [
+  { id: 'review', label: 'Review requested' },
+  { id: 'assigned', label: 'Assigned' },
+  { id: 'authored', label: 'Authored PRs & issues' },
+] as const;
 
 const DB_NAME = 'mono-home';
 const STORE_NAME = 'todos';
@@ -54,7 +62,7 @@ const HANG_OFFSETS = [2, 8, 4, 10, 6, 0];
 const PRIORITIES: Priority[] = ['p0', 'p1', 'p2'];
 const FOCUS_LIMIT = 3;
 const PRIORITY_COLORS: Record<Priority, string> = {
-  p0: '#245da8',
+  p0: '#a78bfa',
   p1: '#bd9235',
   p2: '#555b5c',
 };
@@ -119,6 +127,7 @@ function artifactFromRecord(record: ArtifactRecord): Artifact {
     kind: record.kind ?? detectKind(record.text, Boolean(record.image)),
     priority: record.priority ?? 'p2',
     archived: record.archived ?? false,
+    completed: record.completed ?? false,
     imageUrl: record.image ? URL.createObjectURL(record.image) : undefined,
   };
 }
@@ -134,7 +143,7 @@ function formatArtifactText(artifact: Artifact) {
 
 function makeRoomForFocus(artifacts: Artifact[], incomingStackKey: string): Artifact[] {
   const focusedStackKeys = Array.from(new Set(artifacts
-    .filter((artifact) => !artifact.archived && (artifact.priority ?? 'p2') === 'p0')
+    .filter((artifact) => !artifact.archived && !artifact.completed && (artifact.priority ?? 'p2') === 'p0')
     .map((artifact) => artifact.stackId ?? artifact.id)))
     .filter((key) => key !== incomingStackKey);
   if (focusedStackKeys.length < FOCUS_LIMIT) return artifacts;
@@ -230,7 +239,7 @@ export function HomeDashboard() {
   const [dragAtArchive, setDragAtArchive] = useState(false);
   const [dragPreview, setDragPreview] = useState<DragPreview>();
   const [returningFocusId, setReturningFocusId] = useState<string>();
-  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [drawerView, setDrawerView] = useState<'archive' | 'completed' | null>(null);
   const [githubOpen, setGithubOpen] = useState(false);
   const [githubUsername, setGithubUsername] = useState('');
   const [githubToken, setGithubToken] = useState('');
@@ -308,6 +317,7 @@ export function HomeDashboard() {
         kind: detectKind(text, Boolean(pendingImage)),
         priority: draftPriority,
         archived: false,
+        completed: false,
       }, ...prepared];
     });
     setDraft('');
@@ -348,26 +358,18 @@ export function HomeDashboard() {
     });
   }
 
-  function removeArtifact(ids: string[]) {
-    setArtifacts((current) => {
-      current.filter((artifact) => ids.includes(artifact.id)).forEach((removed) => {
-        if (!removed.imageUrl?.startsWith('blob:')) return;
-        URL.revokeObjectURL(removed.imageUrl);
-        imageUrlsRef.current = imageUrlsRef.current.filter((url) => url !== removed.imageUrl);
-      });
-      return current.filter((artifact) => !ids.includes(artifact.id));
-    });
-    setDiscardingId(undefined);
+  function archiveArtifacts(ids: string[]) {
+    setArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: true, completed: false } : artifact));
     setDraggingId(undefined);
-    setDragAtShredder(false);
     setDragAtArchive(false);
     setDragPreview(undefined);
   }
 
-  function archiveArtifacts(ids: string[]) {
-    setArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: true } : artifact));
+  function completeArtifacts(ids: string[]) {
+    setArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: false, completed: true } : artifact));
+    setDiscardingId(undefined);
     setDraggingId(undefined);
-    setDragAtArchive(false);
+    setDragAtShredder(false);
     setDragPreview(undefined);
   }
 
@@ -377,7 +379,7 @@ export function HomeDashboard() {
       const prepared = restored && (restored.priority ?? 'p2') === 'p0'
         ? makeRoomForFocus(current, restored.stackId ?? restored.id)
         : current;
-      return prepared.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: false } : artifact);
+      return prepared.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: false, completed: false } : artifact);
     });
   }
 
@@ -418,19 +420,20 @@ export function HomeDashboard() {
         }
       }
       const queries = [
-        `is:open assignee:${username}`,
-        `is:open is:pr review-requested:${username}`,
-        `is:open is:pr author:${username}`,
+        { section: 'review' as const, query: `is:open is:pr review-requested:${username}` },
+        { section: 'assigned' as const, query: `is:open assignee:${username}` },
+        { section: 'authored' as const, query: `is:open author:${username}` },
       ];
-      const responses = await Promise.all(queries.map((query) => fetch(`https://api.github.com/search/issues?q=${encodeURIComponent(query)}&per_page=8`, {
+      const responses = await Promise.all(queries.map(({ query }) => fetch(`https://api.github.com/search/issues?q=${encodeURIComponent(query)}&per_page=8`, {
         headers,
       })));
       const failedResponse = responses.find((response) => !response.ok);
       if (failedResponse) throw await githubRequestError(failedResponse, 'search issues and pull requests');
       const payloads = await Promise.all(responses.map((response) => response.json() as Promise<{ items: GitHubResult[] }>));
-      const unique = new Map<number, GitHubResult>();
-      payloads.flatMap((payload) => payload.items).forEach((item) => unique.set(item.id, item));
-      setGithubResults(Array.from(unique.values()).slice(0, 12));
+      setGithubResults(payloads.flatMap((payload, index) => payload.items.map((item) => ({
+        ...item,
+        section: queries[index].section,
+      }))));
       setGithubConnectedUsername(username);
     } catch (error) {
       setGithubError(error instanceof Error ? error.message : 'Unable to reach GitHub.');
@@ -455,6 +458,7 @@ export function HomeDashboard() {
       kind: 'github',
       priority: 'p1',
       archived: false,
+      completed: false,
       sourceUrl: item.html_url,
       sourceRepo: repo,
       sourceNumber: item.number,
@@ -524,7 +528,7 @@ export function HomeDashboard() {
 
     if (dragPreview && artifacts.some((artifact) => artifact.id === id)) {
       const target = artifacts.find((artifact) => {
-        if (artifact.archived || dragPreview.memberIds.includes(artifact.id)) return false;
+        if (artifact.archived || artifact.completed || dragPreview.memberIds.includes(artifact.id)) return false;
         const bounds = dragProxyRefs.current.get(artifact.id)?.getBoundingClientRect();
         return Boolean(bounds && info.point.x >= bounds.left && info.point.x <= bounds.right && info.point.y >= bounds.top && info.point.y <= bounds.bottom);
       });
@@ -551,8 +555,10 @@ export function HomeDashboard() {
     });
   }
 
-  const activeArtifacts = artifacts.filter((artifact) => !artifact.archived);
+  const activeArtifacts = artifacts.filter((artifact) => !artifact.archived && !artifact.completed);
   const archivedArtifacts = artifacts.filter((artifact) => artifact.archived);
+  const completedArtifacts = artifacts.filter((artifact) => artifact.completed);
+  const drawerArtifacts = drawerView === 'completed' ? completedArtifacts : archivedArtifacts;
   const artifactGroups = new Map<string, Artifact[]>();
   activeArtifacts.forEach((artifact) => {
     const key = artifact.stackId ?? artifact.id;
@@ -572,99 +578,21 @@ export function HomeDashboard() {
       <img aria-hidden="true" src="/studio-assets/landscape.jpg" className="studio-landscape" style={{ height: 'calc(100% - 185px)' }} />
 
       <div className="absolute right-6 top-5 z-50 flex items-center gap-2 sm:right-10">
-        <div className="relative">
+        <div>
           <button
             onClick={() => setGithubOpen((open) => !open)}
             className={`flex h-9 items-center gap-2 border-b px-2.5 font-mono text-[9px] transition-colors ${githubOpen ? 'border-primary/55 text-primary' : 'border-foreground/14 text-foreground/48 hover:text-foreground'}`}
-            aria-label="Connect GitHub"
+            aria-label="Open GitHub inbox"
           >
             <GitPullRequest size={13} />
             <span className="hidden sm:inline">{githubConnectedUsername ? `@${githubConnectedUsername}` : 'GitHub'}</span>
           </button>
-          <AnimatePresence>
-            {githubOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 6 }}
-                className="absolute right-0 top-[calc(100%+8px)] w-[min(88vw,440px)] border border-border/70 bg-card p-3 text-card-foreground shadow-[0_20px_45px_-24px_rgba(20,24,30,0.55)]"
-              >
-                <div className="mb-3">
-                  <div className="font-mono text-[8px] uppercase tracking-[0.13em] text-foreground/55">GitHub inbox</div>
-                  <p className="mt-1 text-[10px] text-foreground/48">Assigned issues, active pull requests, and reviews.</p>
-                </div>
-                {githubConnectedUsername ? (
-                  <div className="flex items-center justify-between border-y border-foreground/10 py-2">
-                    <div className="flex items-center gap-2 font-mono text-[9px] text-foreground/70">
-                      <span className="h-2 w-2 rounded-full bg-[#245da8]" /> @{githubConnectedUsername}
-                    </div>
-                    <button onClick={disconnectGithub} className="font-mono text-[8px] uppercase tracking-[0.1em] text-foreground/48 hover:text-foreground">Disconnect</button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="grid gap-1 font-mono text-[7px] uppercase tracking-[0.1em] text-foreground/42">
-                        Username <span className="normal-case tracking-normal text-foreground/35">optional with token</span>
-                        <input
-                          value={githubUsername}
-                          onChange={(event) => setGithubUsername(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') void connectGithub();
-                          }}
-                          placeholder="monil"
-                          className="min-w-0 border border-border/70 bg-background/70 px-3 py-2 font-mono text-[11px] normal-case tracking-normal text-foreground outline-none focus:border-primary/55"
-                        />
-                      </label>
-                      <label className="grid gap-1 font-mono text-[7px] uppercase tracking-[0.1em] text-foreground/42">
-                        Private token <span className="normal-case tracking-normal text-foreground/35">optional</span>
-                        <input
-                          type="password"
-                          autoComplete="off"
-                          value={githubToken}
-                          onChange={(event) => setGithubToken(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') void connectGithub();
-                          }}
-                          placeholder="github_pat_…"
-                          className="min-w-0 border border-border/70 bg-background/70 px-3 py-2 font-mono text-[11px] normal-case tracking-normal text-foreground outline-none focus:border-primary/55"
-                        />
-                      </label>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-4">
-                      <p className="max-w-[270px] text-[9px] leading-4 text-foreground/40">Used only for this session and sent directly to api.github.com. Fine-grained tokens must include the repositories you want shown.</p>
-                      <button onClick={() => void connectGithub()} disabled={githubLoading || (!githubUsername.trim() && !githubToken.trim())} className="h-8 bg-primary px-4 font-mono text-[8px] uppercase tracking-[0.1em] text-primary-foreground disabled:opacity-35">
-                        {githubLoading ? 'Loading' : 'Connect'}
-                      </button>
-                    </div>
-                  </>
-                )}
-                {githubError && <p className="mt-2 whitespace-pre-line font-mono text-[9px] leading-4 text-destructive">{githubError}</p>}
-                {githubResults.length > 0 && (
-                  <div className="mt-3 max-h-52 space-y-1 overflow-y-auto">
-                    {githubResults.map((item) => {
-                      const repo = item.repository_url.split('/').slice(-2).join('/');
-                      return (
-                        <div key={item.id} className="flex items-center gap-3 border-t border-foreground/8 px-1 py-2">
-                          <GitPullRequest size={12} className="shrink-0 text-foreground/55" />
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-[11px] text-foreground/85">{item.title}</p>
-                            <p className="font-mono text-[8px] uppercase text-foreground/45">{repo} #{item.number} · {item.pull_request ? 'PR' : 'issue'}</p>
-                          </div>
-                          <button onClick={() => pinGithubItem(item)} className="border border-border/70 px-2 py-1 font-mono text-[8px] uppercase hover:bg-secondary">Pin</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
         <div className="flex h-9 items-center border-b border-foreground/14 text-foreground/48">
           <button onClick={() => setSearchOpen((open) => {
             if (open) setCardQuery('');
             return !open;
-          })} className={`flex h-8 w-8 items-center justify-center transition-colors hover:text-foreground ${searchOpen ? 'text-[#245da8]' : ''}`} aria-label="Search cards" title="Search cards">
+          })} className={`flex h-8 w-8 items-center justify-center transition-colors hover:text-foreground ${searchOpen ? 'text-primary' : ''}`} aria-label="Search cards" title="Search cards">
             <Search size={13} />
           </button>
           <AnimatePresence initial={false}>
@@ -683,7 +611,7 @@ export function HomeDashboard() {
           <header className="max-w-[470px] pt-8 lg:pt-12">
             <h1 className="font-serif text-[49px] font-medium leading-[0.98] tracking-[-0.052em] text-foreground sm:text-[66px] lg:text-[72px]">
               Hold on to<br />
-              the <em className="font-normal text-[#174c9c]">loose</em> ends.
+              the <em className="font-normal text-primary">loose</em> ends.
             </h1>
           </header>
 
@@ -769,7 +697,7 @@ export function HomeDashboard() {
             >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className="h-px w-7 bg-[#245da8]/70" />
+                <span className="h-px w-7 bg-primary/70" />
                 <span className="font-serif text-[18px] italic text-foreground/82">Today</span>
                 <span className="font-mono text-[7px] uppercase tracking-[0.14em] text-foreground/42">{focusGroups.length} of {FOCUS_LIMIT} in focus</span>
               </div>
@@ -789,9 +717,9 @@ export function HomeDashboard() {
                       title="Return to the wall as P1"
                       aria-label={`Return ${item.text} to the wall as P1`}
                     >
-                      <span className="absolute inset-y-0 left-0 w-[2px] bg-[#245da8]" />
-                      <span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-[#245da8]/18 bg-[#245da8]/[0.06] px-2 font-mono text-[7px] uppercase tracking-[0.1em] text-[#245da8]">
-                        <span className="h-1.5 w-1.5 rounded-full bg-[#245da8]" /> P0
+                      <span className="absolute inset-y-0 left-0 w-[2px] bg-primary" />
+                      <span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2 font-mono text-[7px] uppercase tracking-[0.1em] text-primary">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" /> P0
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-serif text-[14px] leading-tight text-foreground/88">{item.text}</span>
@@ -800,7 +728,7 @@ export function HomeDashboard() {
                           {group.length > 1 ? `${group.length} linked` : 'Active reference'}
                         </span>
                       </span>
-                      <RotateCcw size={11} className="shrink-0 text-foreground/28 transition-colors group-hover/focus:text-[#245da8]" />
+                      <RotateCcw size={11} className="shrink-0 text-foreground/28 transition-colors group-hover/focus:text-primary" />
                     </motion.button>
                 );
               })}
@@ -893,6 +821,18 @@ export function HomeDashboard() {
                         <Link2 size={9} /> {members.length}
                       </span>
                     )}
+                    {item.sourceUrl && (
+                      <a
+                        href={item.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="absolute right-3 z-30 flex h-8 items-center gap-1.5 border border-foreground/15 bg-[#f5f0e7] px-2.5 font-mono text-[8px] uppercase tracking-[0.06em] text-foreground/70 shadow-sm hover:border-primary/40 hover:text-primary"
+                        style={{ top: 304 + offset }}
+                        aria-label={`Open ${item.text} on GitHub`}
+                      >
+                        Open <ExternalLink size={10} />
+                      </a>
+                    )}
                     <motion.div
                       ref={(element) => {
                         if (element) dragProxyRefs.current.set(item.id, element);
@@ -963,39 +903,209 @@ export function HomeDashboard() {
       )}
 
       {isReady && createPortal(
-        <>
-          <button
-            ref={archiveRef}
-            onClick={() => setArchiveOpen((open) => !open)}
-            className={`fixed bottom-0 left-5 z-[55] flex h-8 w-[86px] items-center justify-center gap-2 border border-b-0 border-border/80 bg-card/95 text-foreground shadow-[0_-5px_14px_-12px_rgba(20,31,42,0.5)] transition-transform lg:left-[284px] ${dragAtArchive ? 'h-11 -translate-y-1' : ''}`}
-            aria-label="Open archive drawer"
-          >
-            <Archive size={12} />
-            <span className="font-mono text-[7px] uppercase tracking-[0.12em]">archive {archivedArtifacts.length}</span>
-          </button>
-          <AnimatePresence>
-            {archiveOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                className="fixed bottom-10 left-5 z-[60] w-[310px] border border-border/80 bg-card p-3 text-card-foreground shadow-[0_22px_46px_-24px_rgba(20,24,30,0.65)] lg:left-[284px]"
+        <AnimatePresence>
+          {githubOpen && (
+            <>
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setGithubOpen(false)}
+                className="fixed inset-0 z-[66] bg-black/35"
+                aria-label="Close GitHub inbox"
+              />
+              <motion.section
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                className="fixed inset-x-0 bottom-0 z-[70] max-h-[78dvh] overflow-hidden rounded-t-[12px] border border-b-0 border-border bg-card text-card-foreground shadow-[0_-8px_0_#111] lg:left-[280px]"
+                role="dialog"
+                aria-modal="true"
+                aria-label="GitHub inbox"
               >
-                <div className="mb-2 flex items-center justify-between font-mono text-[8px] uppercase tracking-[0.14em] text-foreground/55">
-                  <span>Archive drawer</span>
-                  <button onClick={() => setArchiveOpen(false)} aria-label="Close archive"><X size={12} /></button>
+                <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-muted-foreground/35" />
+                <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-8">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-[20px] font-bold tracking-tight"><GitPullRequest size={18} /> GitHub inbox</h2>
+                    <p className="mt-0.5 text-[12px] text-muted-foreground">Reviews and open work that need your attention.</p>
+                  </div>
+                  <button onClick={() => setGithubOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-border hover:bg-secondary" aria-label="Close GitHub inbox"><X size={16} /></button>
                 </div>
-                <div className="max-h-64 space-y-1 overflow-y-auto">
-                  {archivedArtifacts.length === 0 && <p className="py-5 text-center font-mono text-[9px] text-foreground/38">Nothing filed away.</p>}
-                  {archivedArtifacts.map((artifact) => (
-                    <div key={artifact.id} className="flex items-center gap-2 border-t border-foreground/8 py-2">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: PRIORITY_COLORS[artifact.priority ?? 'p2'] }} />
-                      <span className="min-w-0 flex-1 truncate text-[11px]">{artifact.text}</span>
-                      <button onClick={() => restoreArtifacts(artifact.stackId ? archivedArtifacts.filter((item) => item.stackId === artifact.stackId).map((item) => item.id) : [artifact.id])} className="flex h-7 w-7 items-center justify-center border border-border/70 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" title="Restore"><RotateCcw size={11} /></button>
+
+                {!githubConnectedUsername ? (
+                  <div className="px-5 py-5 sm:px-8">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="grid gap-1.5 font-mono text-[8px] uppercase tracking-[0.1em] text-muted-foreground">
+                        Username <span className="normal-case tracking-normal opacity-70">optional with token</span>
+                        <input
+                          value={githubUsername}
+                          onChange={(event) => setGithubUsername(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !githubLoading) void connectGithub();
+                          }}
+                          placeholder="monil"
+                          className="h-10 min-w-0 rounded-[4px] border border-border bg-background px-3 font-mono text-[12px] normal-case tracking-normal text-foreground outline-none focus:border-primary"
+                        />
+                      </label>
+                      <label className="grid gap-1.5 font-mono text-[8px] uppercase tracking-[0.1em] text-muted-foreground">
+                        Private token <span className="normal-case tracking-normal opacity-70">optional</span>
+                        <input
+                          type="password"
+                          autoComplete="off"
+                          value={githubToken}
+                          onChange={(event) => setGithubToken(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !githubLoading) void connectGithub();
+                          }}
+                          placeholder="github_pat_…"
+                          className="h-10 min-w-0 rounded-[4px] border border-border bg-background px-3 font-mono text-[12px] normal-case tracking-normal text-foreground outline-none focus:border-primary"
+                        />
+                      </label>
                     </div>
-                  ))}
-                </div>
-              </motion.div>
+                    <div className="mt-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+                      <p className="max-w-xl text-[11px] leading-5 text-muted-foreground">The token stays in this browser session and is sent directly to api.github.com.</p>
+                      <button onClick={() => void connectGithub()} disabled={githubLoading || (!githubUsername.trim() && !githubToken.trim())} className="h-10 rounded-[4px] bg-primary px-5 font-mono text-[9px] uppercase tracking-[0.1em] text-primary-foreground disabled:opacity-35">
+                        {githubLoading ? 'Connecting…' : 'Connect GitHub'}
+                      </button>
+                    </div>
+                    {githubError && <p className="mt-3 whitespace-pre-line font-mono text-[10px] leading-5 text-destructive">{githubError}</p>}
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3 sm:px-8">
+                      <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground"><span className="h-2 w-2 rounded-full bg-primary" /> @{githubConnectedUsername}</div>
+                      <div className="flex items-center gap-4">
+                        <button onClick={() => void connectGithub()} disabled={githubLoading} className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground disabled:opacity-35">{githubLoading ? 'Refreshing…' : 'Refresh'}</button>
+                        <button onClick={disconnectGithub} className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground">Disconnect</button>
+                      </div>
+                    </div>
+                    {githubError && <p className="border-b border-border px-5 py-3 font-mono text-[10px] leading-5 text-destructive sm:px-8">{githubError}</p>}
+                    <div className="max-h-[56dvh] overflow-y-auto px-5 py-4 sm:px-8">
+                      {githubResults.length === 0 && !githubLoading ? (
+                        <p className="py-12 text-center text-[13px] text-muted-foreground">All caught up. No open GitHub items found.</p>
+                      ) : (
+                        <div className="space-y-6">
+                          {GITHUB_SECTIONS.map((section) => {
+                            const items = githubResults.filter((item) => item.section === section.id);
+                            return (
+                              <section key={section.id}>
+                                <div className="mb-2 flex items-center gap-2">
+                                  <h3 className="text-[13px] font-semibold">{section.label}</h3>
+                                  <span className="font-mono text-[9px] text-muted-foreground">{items.length}</span>
+                                </div>
+                                {items.length === 0 ? (
+                                  <p className="border-t border-border py-3 text-[11px] text-muted-foreground">Nothing here.</p>
+                                ) : (
+                                  <div className="grid gap-2 lg:grid-cols-2">
+                                    {items.map((item) => {
+                                      const repo = item.repository_url.split('/').slice(-2).join('/');
+                                      return (
+                                        <div key={`${section.id}-${item.id}`} className="flex items-center gap-3 rounded-[4px] border border-border bg-background/40 p-3">
+                                          <GitPullRequest size={13} className="shrink-0 text-muted-foreground" />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="truncate text-[13px] font-medium">{item.title}</p>
+                                            <p className="mt-0.5 font-mono text-[9px] uppercase text-muted-foreground">{repo} #{item.number} · {item.pull_request ? 'PR' : 'issue'}</p>
+                                          </div>
+                                          <a href={item.html_url} target="_blank" rel="noreferrer" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border text-muted-foreground hover:bg-secondary hover:text-foreground" title="Open on GitHub" aria-label={`Open ${item.title} on GitHub`}><ExternalLink size={12} /></a>
+                                          <button onClick={() => pinGithubItem(item)} className="h-8 shrink-0 rounded-[4px] border border-border px-3 font-mono text-[8px] uppercase hover:bg-secondary">Pin</button>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </section>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </motion.section>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {isReady && createPortal(
+        <>
+          <div className="fixed bottom-0 left-5 z-[55] flex items-end gap-1 lg:left-[284px]">
+            <button
+              ref={archiveRef}
+              onClick={() => setDrawerView((view) => view === 'archive' ? null : 'archive')}
+              className={`flex h-9 w-[92px] items-center justify-center gap-2 border border-b-0 border-border bg-card text-foreground transition-transform ${dragAtArchive ? 'h-12 -translate-y-1 bg-primary' : ''}`}
+              aria-label="Open archived items"
+            >
+              <Archive size={12} />
+              <span className="font-mono text-[7px] uppercase tracking-[0.12em]">archive {archivedArtifacts.length}</span>
+            </button>
+            <button
+              onClick={() => setDrawerView((view) => view === 'completed' ? null : 'completed')}
+              className="flex h-9 w-[104px] items-center justify-center gap-2 border border-b-0 border-border bg-card text-foreground"
+              aria-label="Open completed items"
+            >
+              <CheckCircle2 size={12} />
+              <span className="font-mono text-[7px] uppercase tracking-[0.12em]">completed {completedArtifacts.length}</span>
+            </button>
+          </div>
+          <AnimatePresence>
+            {drawerView && (
+              <>
+                <motion.button
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setDrawerView(null)}
+                  className="fixed inset-0 z-[56] bg-black/35"
+                  aria-label="Close bottom sheet"
+                />
+                <motion.section
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                  className="fixed inset-x-0 bottom-0 z-[60] max-h-[62dvh] overflow-hidden rounded-t-[12px] border border-b-0 border-border bg-card text-card-foreground shadow-[0_-8px_0_#111] lg:left-[280px]"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Saved items"
+                >
+                  <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-muted-foreground/35" />
+                  <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-8">
+                    <div>
+                      <h2 className="text-[20px] font-bold tracking-tight">Saved items</h2>
+                      <p className="mt-0.5 text-[12px] text-muted-foreground">Archive references for later, or restore completed work.</p>
+                    </div>
+                    <button onClick={() => setDrawerView(null)} className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-border hover:bg-secondary" aria-label="Close saved items"><X size={16} /></button>
+                  </div>
+                  <div className="flex border-b border-border px-5 sm:px-8">
+                    <button onClick={() => setDrawerView('archive')} className={`border-b-[3px] px-1 py-3 text-[13px] font-semibold ${drawerView === 'archive' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}>Archived <span className="ml-1 font-mono text-[11px]">{archivedArtifacts.length}</span></button>
+                    <button onClick={() => setDrawerView('completed')} className={`ml-7 border-b-[3px] px-1 py-3 text-[13px] font-semibold ${drawerView === 'completed' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground'}`}>Completed <span className="ml-1 font-mono text-[11px]">{completedArtifacts.length}</span></button>
+                  </div>
+                  <div className="max-h-[42dvh] overflow-y-auto px-5 py-4 sm:px-8">
+                    {drawerArtifacts.length === 0 ? (
+                      <p className="py-12 text-center text-[13px] text-muted-foreground">No {drawerView} items yet.</p>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {drawerArtifacts.map((artifact) => (
+                          <div key={artifact.id} className="flex items-center gap-3 rounded-[4px] border border-border bg-background/40 p-3">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: PRIORITY_COLORS[artifact.priority ?? 'p2'] }} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[13px] font-medium">{artifact.text}</p>
+                              <p className="mt-0.5 font-mono text-[9px] uppercase text-muted-foreground">{artifact.kind ?? 'note'} · {artifact.priority ?? 'p2'}</p>
+                            </div>
+                            {artifact.sourceUrl && (
+                              <a href={artifact.sourceUrl} target="_blank" rel="noreferrer" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border text-muted-foreground hover:bg-secondary hover:text-foreground" title="Open on GitHub" aria-label={`Open ${artifact.text} on GitHub`}><ExternalLink size={12} /></a>
+                            )}
+                            <button onClick={() => restoreArtifacts(artifact.stackId ? drawerArtifacts.filter((item) => item.stackId === artifact.stackId).map((item) => item.id) : [artifact.id])} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[4px] border border-border text-muted-foreground hover:bg-secondary hover:text-foreground" title="Restore"><RotateCcw size={12} /></button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </motion.section>
+              </>
             )}
           </AnimatePresence>
         </>,
@@ -1019,7 +1129,7 @@ export function HomeDashboard() {
               initial={{ y: -62, opacity: 0, scale: 0.78, rotate: dragPreview.angle }}
               animate={{ y: [-62, -28, 92, 224], opacity: [0, 1, 1, 0], scale: [0.78, 0.78, 0.76, 0.7], rotate: [dragPreview.angle, 0, 0, 0] }}
               transition={{ duration: 1.62, times: [0, 0.1, 0.5, 0.7], ease: [0.4, 0, 0.75, 1] }}
-              onAnimationComplete={() => removeArtifact(dragPreview.memberIds)}
+              onAnimationComplete={() => completeArtifacts(dragPreview.memberIds)}
               className="absolute left-1/2 top-0 z-0 w-[250px] -translate-x-1/2 origin-top"
             >
               <StudioCard {...dragPreview} />

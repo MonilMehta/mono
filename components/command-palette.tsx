@@ -99,7 +99,7 @@ export function CommandPalette({ open, onClose, onSelect, onToggleTheme, isDark 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.12 }}
-          className="fixed inset-0 z-100 bg-background/40 backdrop-blur-md flex items-start justify-center pt-[14vh] px-4"
+          className="fixed inset-0 z-100 flex items-start justify-center bg-black/65 px-4 pt-[14vh]"
           onClick={onClose}
         >
           <motion.div
@@ -108,9 +108,9 @@ export function CommandPalette({ open, onClose, onSelect, onToggleTheme, isDark 
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="surface-panel w-full max-w-xl rounded-2xl overflow-hidden flex flex-col max-h-[68vh]"
+            className="surface-panel flex max-h-[68vh] w-full max-w-xl flex-col overflow-hidden rounded-[4px]"
           >
-            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/50">
+            <div className="flex items-center gap-3 border-b border-border px-4 py-4">
               <Search size={16} className="text-muted-foreground shrink-0" />
               <input
                 ref={inputRef}
@@ -119,7 +119,7 @@ export function CommandPalette({ open, onClose, onSelect, onToggleTheme, isDark 
                 placeholder="Search tools…"
                 className="flex-1 bg-transparent text-[15px] focus:outline-none placeholder:text-muted-foreground/50"
               />
-              <kbd className="text-[10px] px-1.5 py-0.5 rounded-md bg-secondary text-muted-foreground ring-1 ring-border/60 shrink-0 font-mono">esc</kbd>
+              <kbd className="shrink-0 rounded-[3px] border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">esc</kbd>
             </div>
 
             <div ref={listRef} className="flex-1 overflow-y-auto p-2">
@@ -168,7 +168,7 @@ export function CommandPalette({ open, onClose, onSelect, onToggleTheme, isDark 
               )}
             </div>
 
-            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/50 bg-secondary/25">
+            <div className="flex items-center justify-between border-t border-border bg-card px-4 py-3">
               <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <ArrowUp size={11} />
@@ -214,13 +214,13 @@ function ResultRow({
       data-index={index}
       onMouseEnter={onHover}
       onClick={onSelect}
-      className={`w-full flex items-center gap-3 px-2.5 py-2 rounded-xl text-left transition-colors ${
+      className={`flex w-full items-center gap-3 rounded-[4px] px-2.5 py-2 text-left transition-colors ${
         active ? 'bg-secondary text-foreground' : 'text-foreground hover:bg-secondary/60'
       }`}
     >
       <div
-        className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 ${
-          active ? 'bg-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border ${
+          active ? 'border-foreground bg-primary text-primary-foreground' : 'border-border bg-secondary text-muted-foreground'
         }`}
       >
         <Icon size={15} />
@@ -232,7 +232,7 @@ function ResultRow({
         <p className="text-xs text-muted-foreground truncate mt-0.5">{tool.description}</p>
       </div>
       {active && (
-        <kbd className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded-md bg-background/70 text-muted-foreground ring-1 ring-border/50 font-mono">↵</kbd>
+        <kbd className="hidden rounded-[3px] border border-border bg-background/70 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">↵</kbd>
       )}
     </button>
   );
