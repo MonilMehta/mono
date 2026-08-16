@@ -1,7 +1,7 @@
 'use client';
 
 import { animate, AnimatePresence, LayoutGroup, motion, type PanInfo, useMotionValue } from 'framer-motion';
-import { Archive, ArrowUp, Braces, FileText, GitPullRequest, ImagePlus, Link2, Paperclip, PenTool, RotateCcw, Search, Terminal, X } from 'lucide-react';
+import { ArrowUp, Braces, CheckCircle2, FileText, GitPullRequest, ImagePlus, Link2, Paperclip, PenTool, RotateCcw, Search, Terminal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -968,10 +968,10 @@ export function HomeDashboard() {
             ref={archiveRef}
             onClick={() => setArchiveOpen((open) => !open)}
             className={`fixed bottom-0 left-5 z-[55] flex h-8 w-[86px] items-center justify-center gap-2 border border-b-0 border-border/80 bg-card/95 text-foreground shadow-[0_-5px_14px_-12px_rgba(20,31,42,0.5)] transition-transform lg:left-[284px] ${dragAtArchive ? 'h-11 -translate-y-1' : ''}`}
-            aria-label="Open archive drawer"
+            aria-label="Open completed todos"
           >
-            <Archive size={12} />
-            <span className="font-mono text-[7px] uppercase tracking-[0.12em]">archive {archivedArtifacts.length}</span>
+            <CheckCircle2 size={12} />
+            <span className="font-mono text-[7px] uppercase tracking-[0.12em]">completed {archivedArtifacts.length}</span>
           </button>
           <AnimatePresence>
             {archiveOpen && (
@@ -982,16 +982,16 @@ export function HomeDashboard() {
                 className="fixed bottom-10 left-5 z-[60] w-[310px] border border-border/80 bg-card p-3 text-card-foreground shadow-[0_22px_46px_-24px_rgba(20,24,30,0.65)] lg:left-[284px]"
               >
                 <div className="mb-2 flex items-center justify-between font-mono text-[8px] uppercase tracking-[0.14em] text-foreground/55">
-                  <span>Archive drawer</span>
-                  <button onClick={() => setArchiveOpen(false)} aria-label="Close archive"><X size={12} /></button>
+                  <span>Completed todos</span>
+                  <button onClick={() => setArchiveOpen(false)} aria-label="Close completed todos"><X size={12} /></button>
                 </div>
                 <div className="max-h-64 space-y-1 overflow-y-auto">
-                  {archivedArtifacts.length === 0 && <p className="py-5 text-center font-mono text-[9px] text-foreground/38">Nothing filed away.</p>}
+                  {archivedArtifacts.length === 0 && <p className="py-5 text-center font-mono text-[9px] text-foreground/38">Nothing completed yet.</p>}
                   {archivedArtifacts.map((artifact) => (
                     <div key={artifact.id} className="flex items-center gap-2 border-t border-foreground/8 py-2">
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: PRIORITY_COLORS[artifact.priority ?? 'p2'] }} />
                       <span className="min-w-0 flex-1 truncate text-[11px]">{artifact.text}</span>
-                      <button onClick={() => restoreArtifacts(artifact.stackId ? archivedArtifacts.filter((item) => item.stackId === artifact.stackId).map((item) => item.id) : [artifact.id])} className="flex h-7 w-7 items-center justify-center border border-border/70 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" title="Restore"><RotateCcw size={11} /></button>
+                      <button onClick={() => restoreArtifacts(artifact.stackId ? archivedArtifacts.filter((item) => item.stackId === artifact.stackId).map((item) => item.id) : [artifact.id])} className="flex h-7 w-7 items-center justify-center border border-border/70 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" title="Bring back"><RotateCcw size={11} /></button>
                     </div>
                   ))}
                 </div>

@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useState, type ComponentType } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, X, Home, Timer } from 'lucide-react';
+import { Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, X, Home } from 'lucide-react';
 import { ThemeProvider, useTheme } from '@/components/theme-provider';
 import { CommandPalette } from '@/components/command-palette';
 import { MonoLogo } from '@/components/mono-logo';
@@ -24,6 +24,7 @@ import CsvTool from '@/components/tools/csv-tool';
 import TypegenTool from '@/components/tools/typegen-tool';
 import CurlTool from '@/components/tools/curl-tool';
 import LogTool from '@/components/tools/log-tool';
+import MockApiTool from '@/components/tools/mock-api-tool';
 import { HomeDashboard } from '@/components/home-dashboard';
 
 const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
@@ -43,10 +44,11 @@ const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   typegen: TypegenTool,
   curl: CurlTool,
   log: LogTool,
+  'mock-api': MockApiTool,
 };
 
 const NAV_GROUPS: { label: string; ids: ToolId[] }[] = [
-  { label: 'Capture', ids: ['json', 'curl', 'typegen', 'image', 'svg', 'csv'] },
+  { label: 'Capture', ids: ['json', 'curl', 'mock-api', 'typegen', 'image', 'svg', 'csv'] },
   { label: 'Tools', ids: ['blurhash', 'color', 'app-asset', 'deeplink'] },
   { label: 'More', ids: ['base64', 'timestamp', 'url', 'diff', 'regex', 'log'] },
 ];
@@ -77,11 +79,6 @@ function AppShellInner() {
 
   const goHome = useCallback(() => {
     router.push('/', { scroll: false });
-    setSidebarOpen(false);
-  }, [router]);
-
-  const goFocus = useCallback(() => {
-    router.push('/focus');
     setSidebarOpen(false);
   }, [router]);
 
@@ -222,18 +219,6 @@ function AppShellInner() {
                 <Home size={14} strokeWidth={isHome ? 2.25 : 1.85} />
               </span>
               {!railCollapsed && <span className={`truncate text-[11px] ${isHome ? 'font-semibold' : 'font-medium'}`}>Studio wall</span>}
-            </button>
-            <button
-              onClick={goFocus}
-              title="Focus room"
-              className={`group relative flex w-full items-center rounded-[3px] text-left text-sidebar-foreground/65 transition-all duration-150 hover:bg-sidebar-accent/70 hover:text-sidebar-foreground ${
-                railCollapsed ? 'h-9 justify-center' : 'h-8 gap-2 px-2'
-              }`}
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-foreground">
-                <Timer size={14} strokeWidth={1.85} />
-              </span>
-              {!railCollapsed && <span className="truncate text-[11px] font-medium">Focus room</span>}
             </button>
           </div>
           {NAV_GROUPS.map((group, groupIndex) => {
