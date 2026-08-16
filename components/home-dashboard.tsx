@@ -607,15 +607,7 @@ export function HomeDashboard() {
       </div>
 
       <div className="relative z-[2] mx-auto w-full max-w-[1320px] px-6 pb-3 pt-14 sm:px-10 lg:pt-20">
-        <div className="grid items-center gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:gap-14">
-          <header className="max-w-[470px] pt-8 lg:pt-12">
-            <h1 className="font-serif text-[49px] font-medium leading-[0.98] tracking-[-0.052em] text-foreground sm:text-[66px] lg:text-[72px]">
-              Hold on to<br />
-              the <em className="font-normal text-primary">loose</em> ends.
-            </h1>
-          </header>
-
-          <div className="capture-desk relative lg:mt-16">
+          <div className="capture-desk relative w-full">
             {pendingImageUrl && (
               <div className="relative mb-4 w-fit">
                 <img src={pendingImageUrl} alt="New artifact preview" className="max-h-24 max-w-44 border border-border bg-card object-contain p-1" />
@@ -680,7 +672,6 @@ export function HomeDashboard() {
                 <ArrowUp size={18} />
               </button>
             </div>
-          </div>
         </div>
       </div>
 
@@ -741,7 +732,7 @@ export function HomeDashboard() {
       <motion.div
         className="relative z-[3] mt-5 overflow-x-auto overflow-y-hidden pb-16 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        <div className="clothesline-track relative min-h-[440px]" style={{ width: wallWidth }}>
+        <div className="clothesline-track relative min-h-[440px]" style={{ width: `max(100%, ${wallWidth}px)` }}>
           <div className="clothesline-cord absolute left-0 right-0 top-[34px]" />
 
           <AnimatePresence mode="popLayout">
