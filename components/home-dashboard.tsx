@@ -4,6 +4,7 @@ import { animate, AnimatePresence, LayoutGroup, motion, type PanInfo, useMotionV
 import { Archive, ArrowUp, Braces, CheckCircle2, ExternalLink, FileText, GitPullRequest, ImagePlus, Link2, Paperclip, PenTool, RotateCcw, Search, Terminal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { changedRecords, mergeRecords } from '@/lib/artifact-sync';
 
 type ArtifactKind = 'note' | 'image' | 'json' | 'request' | 'svg' | 'github';
 type Priority = 'p0' | 'p1' | 'p2';
@@ -57,6 +58,7 @@ const GITHUB_SECTIONS = [
 
 const DB_NAME = 'mono-home';
 const STORE_NAME = 'todos';
+const SYNC_CHANNEL_NAME = `${DB_NAME}-sync`;
 const SETTLE_ANGLES = [-1.2, 0.8, -0.45, 1.05, -0.7, 0.4];
 const HANG_OFFSETS = [2, 8, 4, 10, 6, 0];
 const PRIORITIES: Priority[] = ['p0', 'p1', 'p2'];
@@ -93,12 +95,11 @@ async function readArtifacts(): Promise<ArtifactRecord[]> {
   });
 }
 
-async function saveArtifacts(artifacts: ArtifactRecord[]) {
+async function saveArtifactChanges(artifacts: ArtifactRecord[]) {
   const database = await openDatabase();
   await new Promise<void>((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
-    store.clear();
     artifacts.forEach((artifact) => store.put(artifact));
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
@@ -255,25 +256,67 @@ export function HomeDashboard() {
   const dragOffsetRef = useRef({ x: 125, y: 153 });
   const previewX = useMotionValue(0);
   const previewY = useMotionValue(0);
+  const artifactsRef = useRef<Artifact[]>([]);
   const imageUrlsRef = useRef<string[]>([]);
+  const saveQueueRef = useRef(Promise.resolve());
+  const syncChannelRef = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
+    const channel = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    const pendingRemoteRecords: ArtifactRecord[] = [];
+    let isLoaded = false;
+    syncChannelRef.current = channel;
+
+    const applyRecords = (records: ArtifactRecord[]) => {
+      const incoming = records.map(artifactFromRecord);
+      setArtifacts((current) => {
+        const merged = mergeRecords(current, incoming).sort((a, b) => b.createdAt - a.createdAt);
+        const nextImageUrls = merged.flatMap((artifact) => artifact.imageUrl?.startsWith('blob:') ? [artifact.imageUrl] : []);
+        imageUrlsRef.current.filter((url) => !nextImageUrls.includes(url)).forEach((url) => URL.revokeObjectURL(url));
+        imageUrlsRef.current = nextImageUrls;
+        artifactsRef.current = merged;
+        return merged;
+      });
+    };
+
+    channel.onmessage = (event: MessageEvent<ArtifactRecord[]>) => {
+      if (!Array.isArray(event.data)) return;
+      if (!isLoaded) {
+        pendingRemoteRecords.push(...event.data);
+        return;
+      }
+      applyRecords(event.data);
+    };
+
     readArtifacts()
       .then((records) => {
-        const restored = records.sort((a, b) => b.createdAt - a.createdAt).map(artifactFromRecord);
-        imageUrlsRef.current = restored.flatMap((artifact) => artifact.imageUrl?.startsWith('blob:') ? [artifact.imageUrl] : []);
-        setArtifacts(restored);
+        isLoaded = true;
+        applyRecords(mergeRecords(records, pendingRemoteRecords));
+        setIsReady(true);
       })
-      .catch(() => undefined)
-      .finally(() => setIsReady(true));
+      .catch(() => undefined);
 
-    return () => imageUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    return () => {
+      channel.close();
+      imageUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    };
   }, []);
 
-  useEffect(() => {
+  function commitArtifacts(update: (current: Artifact[]) => Artifact[]) {
     if (!isReady) return;
-    void saveArtifacts(artifacts.map(({ imageUrl: _imageUrl, ...artifact }) => artifact)).catch(() => undefined);
-  }, [artifacts, isReady]);
+    const current = artifactsRef.current;
+    const next = update(current);
+    const changed = changedRecords(current, next);
+    if (changed.length === 0) return;
+
+    artifactsRef.current = next;
+    setArtifacts(next);
+    const records = changed.map(({ imageUrl: _imageUrl, ...artifact }) => artifact);
+    saveQueueRef.current = saveQueueRef.current
+      .then(() => saveArtifactChanges(records))
+      .then(() => syncChannelRef.current?.postMessage(records))
+      .catch(() => undefined);
+  }
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
@@ -301,12 +344,12 @@ export function HomeDashboard() {
 
   function addArtifact() {
     const text = draft.trim();
-    if (!text && !pendingImage) return;
+    if (!isReady || (!text && !pendingImage)) return;
 
     const imageUrl = pendingImage ? URL.createObjectURL(pendingImage) : undefined;
     if (imageUrl) imageUrlsRef.current.push(imageUrl);
     const id = crypto.randomUUID();
-    setArtifacts((current) => {
+    commitArtifacts((current) => {
       const prepared = draftPriority === 'p0' ? makeRoomForFocus(current, id) : current;
       return [{
         id,
@@ -332,7 +375,7 @@ export function HomeDashboard() {
   }
 
   function cycleArtifactPriority(id: string) {
-    setArtifacts((current) => {
+    commitArtifacts((current) => {
       const artifact = current.find((item) => item.id === id);
       if (!artifact) return current;
       const stackKey = artifact.stackId ?? artifact.id;
@@ -350,7 +393,7 @@ export function HomeDashboard() {
 
   function returnToWall(id: string) {
     setReturningFocusId(id);
-    setArtifacts((current) => {
+    commitArtifacts((current) => {
       const artifact = current.find((item) => item.id === id);
       if (!artifact) return current;
       const stackKey = artifact.stackId ?? artifact.id;
@@ -359,14 +402,14 @@ export function HomeDashboard() {
   }
 
   function archiveArtifacts(ids: string[]) {
-    setArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: true, completed: false } : artifact));
+    commitArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: true, completed: false } : artifact));
     setDraggingId(undefined);
     setDragAtArchive(false);
     setDragPreview(undefined);
   }
 
   function completeArtifacts(ids: string[]) {
-    setArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: false, completed: true } : artifact));
+    commitArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: false, completed: true } : artifact));
     setDiscardingId(undefined);
     setDraggingId(undefined);
     setDragAtShredder(false);
@@ -374,7 +417,7 @@ export function HomeDashboard() {
   }
 
   function restoreArtifacts(ids: string[]) {
-    setArtifacts((current) => {
+    commitArtifacts((current) => {
       const restored = current.find((artifact) => ids.includes(artifact.id));
       const prepared = restored && (restored.priority ?? 'p2') === 'p0'
         ? makeRoomForFocus(current, restored.stackId ?? restored.id)
@@ -384,7 +427,7 @@ export function HomeDashboard() {
   }
 
   function linkArtifacts(sourceIds: string[], targetId: string) {
-    setArtifacts((current) => {
+    commitArtifacts((current) => {
       const target = current.find((artifact) => artifact.id === targetId);
       if (!target) return current;
       const targetIds = target.stackId
@@ -450,8 +493,9 @@ export function HomeDashboard() {
   }
 
   function pinGithubItem(item: GitHubResult) {
+    if (!isReady) return;
     const repo = item.repository_url.split('/').slice(-2).join('/');
-    setArtifacts((current) => [{
+    commitArtifacts((current) => [{
       id: crypto.randomUUID(),
       text: item.title,
       createdAt: Date.now(),
@@ -665,7 +709,7 @@ export function HomeDashboard() {
               </div>
               <button
                 onClick={addArtifact}
-                disabled={!draft.trim() && !pendingImage}
+                disabled={!isReady || (!draft.trim() && !pendingImage)}
                 className="pin-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-[transform,opacity] hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
                 aria-label="Pin to wall"
               >

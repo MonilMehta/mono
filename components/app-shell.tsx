@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useRef, useState, type ComponentType } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, Moon, PanelLeftClose, PanelLeftOpen, Search, Sun, X, Home } from 'lucide-react';
@@ -8,43 +9,26 @@ import { ThemeProvider, useTheme } from '@/components/theme-provider';
 import { CommandPalette } from '@/components/command-palette';
 import { MonoLogo } from '@/components/mono-logo';
 import { TOOLS, type ToolId } from '@/lib/tools-registry';
-import JsonTool from '@/components/tools/json-tool';
-import Base64Tool from '@/components/tools/base64-tool';
-import UrlTool from '@/components/tools/url-tool';
-import TimestampTool from '@/components/tools/timestamp-tool';
-import ColorTool from '@/components/tools/color-tool';
-import DiffTool from '@/components/tools/diff-tool';
-import RegexTool from '@/components/tools/regex-tool';
-import DeeplinkTool from '@/components/tools/deeplink-tool';
-import ImageTool from '@/components/tools/image-tool';
-import SvgTool from '@/components/tools/svg-tool';
-import BlurhashTool from '@/components/tools/blurhash-tool';
-import AppAssetTool from '@/components/tools/app-asset-tool';
-import CsvTool from '@/components/tools/csv-tool';
-import TypegenTool from '@/components/tools/typegen-tool';
-import CurlTool from '@/components/tools/curl-tool';
-import LogTool from '@/components/tools/log-tool';
-import MockApiTool from '@/components/tools/mock-api-tool';
 import { HomeDashboard } from '@/components/home-dashboard';
 
 const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
-  json: JsonTool,
-  base64: Base64Tool,
-  url: UrlTool,
-  timestamp: TimestampTool,
-  color: ColorTool,
-  diff: DiffTool,
-  regex: RegexTool,
-  deeplink: DeeplinkTool,
-  image: ImageTool,
-  svg: SvgTool,
-  blurhash: BlurhashTool,
-  'app-asset': AppAssetTool,
-  csv: CsvTool,
-  typegen: TypegenTool,
-  curl: CurlTool,
-  log: LogTool,
-  'mock-api': MockApiTool,
+  json: dynamic(() => import('@/components/tools/json-tool')),
+  base64: dynamic(() => import('@/components/tools/base64-tool')),
+  url: dynamic(() => import('@/components/tools/url-tool')),
+  timestamp: dynamic(() => import('@/components/tools/timestamp-tool')),
+  color: dynamic(() => import('@/components/tools/color-tool')),
+  diff: dynamic(() => import('@/components/tools/diff-tool')),
+  regex: dynamic(() => import('@/components/tools/regex-tool')),
+  deeplink: dynamic(() => import('@/components/tools/deeplink-tool')),
+  image: dynamic(() => import('@/components/tools/image-tool')),
+  svg: dynamic(() => import('@/components/tools/svg-tool')),
+  blurhash: dynamic(() => import('@/components/tools/blurhash-tool')),
+  'app-asset': dynamic(() => import('@/components/tools/app-asset-tool')),
+  csv: dynamic(() => import('@/components/tools/csv-tool')),
+  typegen: dynamic(() => import('@/components/tools/typegen-tool')),
+  curl: dynamic(() => import('@/components/tools/curl-tool')),
+  log: dynamic(() => import('@/components/tools/log-tool')),
+  'mock-api': dynamic(() => import('@/components/tools/mock-api-tool')),
 };
 
 const NAV_GROUPS: { label: string; ids: ToolId[] }[] = [
