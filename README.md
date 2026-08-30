@@ -1,10 +1,16 @@
 # mono
 
-**mono** is a fast, keyboard-first utility app for everyday dev work — JSON inspection, API helpers, image tools, Expo assets, and more. Most tools run entirely in your browser; shareable mock API responses are encoded in their generated endpoint URL.
+**mono** is a fast, keyboard-first utility app for everyday dev work — JSON inspection, API helpers, image tools, Expo assets, and more. Most tools run entirely in your browser; Mock API endpoints and one-time transfers use short-lived server storage.
 
 <p align="center">
   <img src="public/logo.svg" alt="mono" width="48" height="48" />
 </p>
+
+## Product tour
+
+[![Watch the Mono product tour](docs/mono-product-tour-poster.png)](docs/mono-product-tour.mp4)
+
+[Watch the 24-second product walkthrough →](docs/mono-product-tour.mp4)
 
 ## Why mono
 
