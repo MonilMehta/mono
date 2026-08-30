@@ -58,7 +58,7 @@ Switch tools via URL:
 | **CSV** | CSV/TSV ↔ JSON, JSON → Markdown tables |
 | **Schema & Mocks** | JSON → TypeScript, Zod, mock data, factories, or MSW handlers |
 | **cURL** | curl → fetch, Axios, Python, undici, React Query, RN fetch |
-| **Mock API** | Generate a shareable endpoint with custom GET, POST, and PATCH JSON responses |
+| **Mock API** | Generate a short-lived endpoint with custom GET, POST, and PATCH JSON responses |
 | **Transfer** | Send text or files with an expiring, one-time code |
 
 ### Media
@@ -117,7 +117,7 @@ The sidebar, palette, and shortcuts pick it up automatically.
 
 ## Privacy
 
-Most processing runs in your browser. The Transfer tool uploads its selected text or file to private storage; its one-time code expires after 10 minutes, downloaded files are deleted immediately, and unclaimed files are removed by daily cleanup. Transfers are encrypted in transit but are not end-to-end encrypted. Mock API response bodies are encoded into the generated URL, so mock URLs should not contain secrets. In production, [Vercel Analytics](https://vercel.com/analytics) records page views only.
+Most processing runs in your browser. The Transfer tool uploads its selected text or file to private storage; its one-time code expires after 10 minutes, downloaded files are deleted immediately, and unclaimed files are removed by daily cleanup. Transfers are encrypted in transit but are not end-to-end encrypted. Mock API response bodies are stored in Redis for four hours, so they should not contain secrets. In production, [Vercel Analytics](https://vercel.com/analytics) records page views only.
 
 ## License
 

@@ -1,4 +1,5 @@
-import { decodeMockConfig, type MockMethod } from '@/lib/mock-api';
+import { type MockMethod } from '@/lib/mock-api';
+import { getStoredMock } from '@/lib/mock-api-store';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -7,38 +8,42 @@ const CORS_HEADERS = {
   'Cache-Control': 'no-store',
 };
 
-function handle(request: Request, method: MockMethod) {
-  const encoded = new URL(request.url).searchParams.get('config');
-  if (!encoded) {
+async function handle(request: Request, method: MockMethod) {
+  const id = new URL(request.url).searchParams.get('id')?.toUpperCase();
+  if (!id) {
     return Response.json(
-      { error: 'Missing mock configuration. Create an endpoint with the Mock API tool.' },
+      { error: 'Missing mock endpoint ID.' },
       { status: 400, headers: CORS_HEADERS }
     );
   }
 
   try {
-    const { status, body } = decodeMockConfig(encoded).responses[method];
+    const config = await getStoredMock(id);
+    if (!config) {
+      return Response.json({ error: 'Mock endpoint not found or expired.' }, { status: 404, headers: CORS_HEADERS });
+    }
+    const { status, body } = config.responses[method];
     if (status === 204 || status === 205 || status === 304) {
       return new Response(null, { status, headers: CORS_HEADERS });
     }
     return Response.json(body, { status, headers: CORS_HEADERS });
   } catch {
     return Response.json(
-      { error: 'Invalid mock configuration.' },
-      { status: 400, headers: CORS_HEADERS }
+      { error: 'Mock endpoint is temporarily unavailable.' },
+      { status: 503, headers: CORS_HEADERS }
     );
   }
 }
 
-export function GET(request: Request) {
+export async function GET(request: Request) {
   return handle(request, 'GET');
 }
 
-export function POST(request: Request) {
+export async function POST(request: Request) {
   return handle(request, 'POST');
 }
 
-export function PATCH(request: Request) {
+export async function PATCH(request: Request) {
   return handle(request, 'PATCH');
 }
 

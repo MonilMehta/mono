@@ -7,6 +7,18 @@ export type MockConfig = {
   responses: Record<MockMethod, { status: number; body: unknown }>;
 };
 
+export const MOCK_TTL_SECONDS = 4 * 60 * 60;
+const MOCK_ID_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const MOCK_ID_LENGTH = 10;
+
+export function createMockId(randomIndex: (max: number) => number) {
+  return Array.from({ length: MOCK_ID_LENGTH }, () => MOCK_ID_ALPHABET[randomIndex(MOCK_ID_ALPHABET.length)]).join('');
+}
+
+export function isValidMockId(value: string) {
+  return new RegExp(`^[${MOCK_ID_ALPHABET}]{${MOCK_ID_LENGTH}}$`).test(value);
+}
+
 function toBase64Url(value: string) {
   const bytes = new TextEncoder().encode(value);
   let binary = '';

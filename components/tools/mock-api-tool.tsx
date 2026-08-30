@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, LoaderCircle, Send } from 'lucide-react';
+import { ExternalLink, Link, LoaderCircle, Send } from 'lucide-react';
 import { CopyButton } from '@/components/copy-button';
-import { encodeMockConfig, MOCK_METHODS, type MockConfig, type MockMethod } from '@/lib/mock-api';
+import { MOCK_METHODS, MOCK_TTL_SECONDS, type MockConfig, type MockMethod } from '@/lib/mock-api';
 
 const INITIAL_BODIES: Record<MockMethod, string> = {
   GET: '{\n  "items": []\n}',
@@ -22,6 +22,9 @@ export default function MockApiTool() {
   const [method, setMethod] = useState<MockMethod>('PATCH');
   const [bodies, setBodies] = useState(INITIAL_BODIES);
   const [statuses, setStatuses] = useState<Record<MockMethod, number>>({ GET: 200, POST: 201, PATCH: 200 });
+  const [endpoint, setEndpoint] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
   const [sending, setSending] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
 
@@ -35,15 +38,41 @@ export default function MockApiTool() {
         if (!Number.isInteger(statuses[item]) || statuses[item] < 200 || statuses[item] > 599) throw new Error(`${item} status must be between 200 and 599.`);
         try { return [item, { status: statuses[item], body: JSON.parse(bodies[item]) }]; } catch { throw new Error(`${item} response must be valid JSON.`); }
       })) as MockConfig['responses'];
-      const url = `${origin}/mock/${cleanRoute}?config=${encodeMockConfig({ v: 1, responses })}`;
-      return { url, curl: `curl -X ${method} '${url}'`, error: '' };
-    } catch (error) { return { url: '', curl: '', error: error instanceof Error ? error.message : 'Invalid response.' }; }
-  }, [bodies, cleanRoute, method, origin, statuses]);
+      return { config: { v: 1, responses } as MockConfig, error: '' };
+    } catch (error) { return { config: null, error: error instanceof Error ? error.message : 'Invalid response.' }; }
+  }, [bodies, statuses]);
+
+  useEffect(() => {
+    setEndpoint('');
+    setCreateError('');
+    setTestResult(null);
+  }, [bodies, cleanRoute, statuses]);
+
+  async function createEndpoint() {
+    if (!result.config) throw new Error(result.error || 'Invalid response.');
+    setCreating(true); setCreateError('');
+    try {
+      const response = await fetch('/api/mock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result.config),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Could not create endpoint.');
+      const url = `${origin}/mock/${cleanRoute}?id=${body.id}`;
+      setEndpoint(url);
+      return url;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not create endpoint.';
+      setCreateError(message);
+      throw error;
+    } finally { setCreating(false); }
+  }
 
   async function sendRequest() {
-    if (!result.url) return;
+    if (!result.config) return;
     setSending(true); setTestResult(null); const startedAt = performance.now();
-    try { const response = await fetch(result.url, { method }); setTestResult({ status: response.status, body: prettyJson(await response.text()), elapsed: Math.round(performance.now() - startedAt) }); }
+    try { const response = await fetch(endpoint || await createEndpoint(), { method }); setTestResult({ status: response.status, body: prettyJson(await response.text()), elapsed: Math.round(performance.now() - startedAt) }); }
     catch (error) { setTestResult({ error: error instanceof Error ? error.message : 'Request failed.' }); }
     finally { setSending(false); }
   }
@@ -74,24 +103,43 @@ export default function MockApiTool() {
             />
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <CopyButton
-              text={result.url}
-              label="Copy URL"
-              title="Copy endpoint URL"
-              className="inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-2 text-[13px] font-medium text-foreground hover:bg-secondary"
-            />
-            <a
-              href={result.url || '#'}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Open endpoint"
-              title="Open endpoint"
-              className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-border text-foreground hover:bg-secondary"
-            >
-              <ExternalLink size={16} />
-            </a>
+            {endpoint ? (
+              <>
+                <CopyButton
+                  text={endpoint}
+                  label="Copy URL"
+                  title="Copy endpoint URL"
+                  className="inline-flex items-center gap-2 rounded-[4px] border border-border px-3 py-2 text-[13px] font-medium text-foreground hover:bg-secondary"
+                />
+                <a
+                  href={endpoint}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Open endpoint"
+                  title="Open endpoint"
+                  className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-border text-foreground hover:bg-secondary"
+                >
+                  <ExternalLink size={16} />
+                </a>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void createEndpoint().catch(() => {})}
+                disabled={!result.config || creating}
+                className="inline-flex h-9 items-center gap-2 rounded-[4px] border border-border px-3 text-[13px] font-medium text-foreground hover:bg-secondary disabled:opacity-40"
+              >
+                {creating ? <LoaderCircle size={14} className="animate-spin" /> : <Link size={14} />}
+                {creating ? 'Creating' : 'Create URL'}
+              </button>
+            )}
           </div>
         </div>
+        {(endpoint || createError) && (
+          <div className={`border-b border-border px-4 py-2.5 font-mono text-[11px] sm:px-5 ${createError ? 'text-destructive' : 'text-muted-foreground'}`}>
+            {createError || `${endpoint} · expires in ${MOCK_TTL_SECONDS / 3_600} hours`}
+          </div>
+        )}
 
         <div className="overflow-x-auto border-b border-border px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-5">
           <div className="flex min-w-max gap-8">
@@ -177,16 +225,16 @@ export default function MockApiTool() {
           <button
             type="button"
             onClick={() => void sendRequest()}
-            disabled={!result.url || sending}
+            disabled={!result.config || sending || creating}
             className="gum-button inline-flex h-10 shrink-0 items-center gap-2 px-4 text-[13px] font-semibold disabled:opacity-40"
           >
             {sending ? <LoaderCircle size={14} className="animate-spin" /> : <Send size={14} />}
             {sending ? 'Sending' : 'Test endpoint'}
           </button>
           <code className={`hidden min-w-0 flex-1 truncate font-mono text-[11px] ${result.error ? 'text-destructive' : 'text-muted-foreground'} sm:block`}>
-            {result.curl || result.error}
+            {endpoint ? `curl -X ${method} '${endpoint}'` : result.error || 'Creates a short endpoint automatically'}
           </code>
-          {result.curl && <CopyButton text={result.curl} size={14} title="Copy cURL command" />}
+          {endpoint && <CopyButton text={`curl -X ${method} '${endpoint}'`} size={14} title="Copy cURL command" />}
         </div>
       </section>
     </div>
