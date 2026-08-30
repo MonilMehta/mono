@@ -29,10 +29,11 @@ const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   curl: dynamic(() => import('@/components/tools/curl-tool')),
   log: dynamic(() => import('@/components/tools/log-tool')),
   'mock-api': dynamic(() => import('@/components/tools/mock-api-tool')),
+  transfer: dynamic(() => import('@/components/tools/transfer-tool')),
 };
 
 const NAV_GROUPS: { label: string; ids: ToolId[] }[] = [
-  { label: 'Capture', ids: ['json', 'curl', 'mock-api', 'typegen', 'image', 'svg', 'csv'] },
+  { label: 'Capture', ids: ['json', 'curl', 'mock-api', 'transfer', 'typegen', 'image', 'svg', 'csv'] },
   { label: 'Tools', ids: ['blurhash', 'color', 'app-asset', 'deeplink'] },
   { label: 'More', ids: ['base64', 'timestamp', 'url', 'diff', 'regex', 'log'] },
 ];
