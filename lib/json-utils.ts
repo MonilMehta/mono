@@ -282,6 +282,12 @@ export interface JsonRepairResult {
   changes: string[];
 }
 
+function normalizeInvalidEscapes(source: string): string {
+  return source.replace(/\\([^"\\/bfnrtu])/g, (_, character: string) =>
+    /[_*#[\]()!+.-]/.test(character) ? character : `\\\\${character}`
+  );
+}
+
 function stripJsonComments(source: string): string {
   let output = '';
   let quote: '"' | "'" | null = null;
@@ -459,14 +465,36 @@ function removeTrailingCommas(source: string): string {
   return output;
 }
 
+function wrapRootObjects(source: string): string {
+  const content = source.trim().replace(/,\s*$/, '');
+  if (!content.startsWith('{') || !content.endsWith('}')) return source;
+
+  try {
+    JSON.parse(content);
+    return source;
+  } catch {
+    const candidate = `[${content}]`;
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      return source;
+    }
+  }
+}
+
 export function repairJson(source: string): JsonRepairResult {
   const stages: { label: string; apply: (value: string) => string }[] = [
     { label: 'removed a byte-order mark', apply: (value) => value.replace(/^\uFEFF/, '') },
+    { label: 'removed Markdown code fences', apply: (value) => value.replace(/^\s*```(?:json)?\s*$/gim, '') },
+    { label: 'normalized invalid escapes', apply: normalizeInvalidEscapes },
+    { label: 'unwrapped Markdown links', apply: (value) => value.replace(/\[(https?:\/\/[^\]\r\n]+)\]\((https?:\/\/[^)\r\n]+)\)/g, '$2') },
     { label: 'removed comments', apply: stripJsonComments },
     { label: 'converted single-quoted strings', apply: replaceSingleQuotedStrings },
     { label: 'quoted bare property names', apply: quoteBareKeys },
     { label: 'normalized Python literals', apply: normalizePythonLiterals },
     { label: 'removed trailing commas', apply: removeTrailingCommas },
+    { label: 'wrapped root objects in an array', apply: wrapRootObjects },
   ];
 
   const changes: string[] = [];
@@ -477,6 +505,17 @@ export function repairJson(source: string): JsonRepairResult {
     text = next;
   }
   return { text, changes };
+}
+
+export function parseJsonWithRepair(json: string) {
+  const parsed = parseJson(json);
+  if (parsed.ok) return { ...parsed, text: json };
+
+  const repair = repairJson(json);
+  if (repair.changes.length === 0) return parsed;
+
+  const repaired = parseJson(repair.text);
+  return repaired.ok ? { ...repaired, text: repair.text } : parsed;
 }
 
 function mapJson(value: unknown, mapper: (key: string, value: unknown) => [string, unknown] | null): unknown {

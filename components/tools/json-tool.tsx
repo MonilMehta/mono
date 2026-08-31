@@ -23,6 +23,7 @@ import JsonViewer, { type ExpandMode } from '@/components/json-viewer';
 import { CodeHighlight } from '@/components/code-highlight';
 import {
   parseJson,
+  parseJsonWithRepair,
   computeStats,
   computeLightweightStats,
   formatBytes,
@@ -32,7 +33,6 @@ import {
   queryJsonPath,
   removeJsonKey,
   renameJsonKey,
-  repairJson,
   sortJsonKeys,
   unflattenJson,
   type JsonStats,
@@ -67,7 +67,6 @@ export default function JsonTool() {
   const [workspacePanel, setWorkspacePanel] = useState<'query' | 'transform' | null>(null);
   const [queryInput, setQueryInput] = useState('$');
   const [queryRequest, setQueryRequest] = useState<string | null>(null);
-  const [repairPreview, setRepairPreview] = useState<{ text: string; changes: string[] } | null>(null);
   const [transformError, setTransformError] = useState('');
   const [extractFields, setExtractFields] = useState('');
   const [renameFrom, setRenameFrom] = useState('');
@@ -91,11 +90,20 @@ export default function JsonTool() {
       return true;
     }
 
-    const result = parseJson(trimmed);
+    let result = parseJson(trimmed);
+    let source = trimmed;
+    if (!result.ok && json.length <= LARGE_PAYLOAD_CHARS) {
+      const repaired = parseJsonWithRepair(trimmed);
+      if (repaired.ok) {
+        result = repaired;
+        source = repaired.text;
+      }
+    }
     if (result.ok) {
       const isLargeInput = json.length > LARGE_PAYLOAD_CHARS;
-      const formatted = isLargeInput ? json : JSON.stringify(result.data, null, 2);
-      const nextStats = isLargeInput ? computeLightweightStats(json) : computeStats(json, result.data);
+      const formatted = isLargeInput ? source : JSON.stringify(result.data, null, 2);
+      const nextStats = isLargeInput ? computeLightweightStats(source) : computeStats(source, result.data);
+      if (source !== trimmed) setInput(source);
       setParseError(null);
       setOutput(formatted);
       setParsedData(result.data);
@@ -135,7 +143,6 @@ export default function JsonTool() {
 
   const handleInputChange = (value: string) => {
     setInput(value);
-    setRepairPreview(null);
     if (!value.trim()) {
       cancelScheduledValidation();
       setParseError(null);
@@ -362,14 +369,7 @@ export default function JsonTool() {
     setParsedData(nextData);
     setStats(computeStats(formatted, nextData));
     setParseError(null);
-    setRepairPreview(null);
   }, [cancelScheduledValidation]);
-
-  const prepareRepair = () => {
-    const repaired = repairJson(input);
-    setRepairPreview(repaired);
-    setShowOutput(true);
-  };
 
   const runTransform = (operation: 'sort' | 'flatten' | 'unflatten' | 'extract' | 'rename' | 'remove') => {
     if (!stats) return;
@@ -900,30 +900,11 @@ export default function JsonTool() {
                     {parseError.line && (
                       <ErrorSnippet input={input} line={parseError.line} column={parseError.column} />
                     )}
-                    {isLargePayload ? (
-                      <p className="text-xs text-muted-foreground">Repair is paused for large payloads because it needs a full source pass.</p>
-                    ) : !repairPreview ? (
-                      <button onClick={prepareRepair} className="rounded-xl bg-secondary px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary/70">
-                        Prepare safe repair
-                      </button>
-                    ) : repairPreview.changes.length > 0 ? (
-                      <div className="space-y-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <p className="text-sm font-semibold text-foreground">Repair preview</p>
-                          <button onClick={() => { loadFileContent(repairPreview.text); setRepairPreview(null); }} className="rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90">
-                            Apply repair
-                          </button>
-                        </div>
-                        <p className="text-xs text-muted-foreground">{repairPreview.changes.join(' · ')}</p>
-                        <CodeHighlight
-                          code={repairPreview.text}
-                          language="json"
-                          className="max-h-64 rounded-xl bg-background/60 p-3"
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">No safe repair was found. The source is left unchanged.</p>
-                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {isLargePayload
+                        ? 'Automatic repair is paused for large payloads because it needs a full source pass.'
+                        : 'No safe automatic repair was found. The source is left unchanged.'}
+                    </p>
                   </div>
                 ) : (
                   <div className="font-mono text-sm leading-7 text-foreground/85">
