@@ -86,6 +86,7 @@ export function ToolChip({ active, onClick, children, className = '' }: ToolChip
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`rounded-[4px] border px-3 py-1.5 text-xs font-semibold transition-all ${
         active
           ? 'border-foreground bg-primary text-primary-foreground shadow-[2px_2px_0_var(--foreground)]'

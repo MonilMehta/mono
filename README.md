@@ -14,7 +14,7 @@
 
 ## Why mono
 
-- **18 tools, one place** — format JSON, decode JWTs, convert CSV, transfer files and text, generate types and mock endpoints, inspect diagnostics, build deep links, and more
+- **19 tools, one place** — format JSON, edit Markdown, decode JWTs, convert CSV, transfer files and text, generate types and mock endpoints, inspect diagnostics, build deep links, and more
 - **Keyboard-first** — jump anywhere with `⌘K`, cycle tools with `⌘]` / `⌘[`, collapse the sidebar with `⌘B`
 - **Private by design** — no accounts; processing stays client-side except when you explicitly use Transfer
 - **Built for real payloads** — debounced parsing, paginated tree views, and drag-and-drop for large JSON and images
@@ -62,6 +62,7 @@ Switch tools via URL:
 | **JSON** | Format, validate, tree view with search, copy path/value, delete nodes, file drop |
 | **Diff** | Line-by-line text/JSON comparison |
 | **CSV** | CSV/TSV ↔ JSON, JSON → Markdown tables |
+| **Markdown** | Write, split-preview, and read; local autosave and preview after a 3-second pause |
 | **Schema & Mocks** | JSON → TypeScript, Zod, mock data, factories, or MSW handlers |
 | **cURL** | curl → fetch, Axios, Python, undici, React Query, RN fetch |
 | **Mock API** | Generate a short-lived endpoint with custom GET, POST, and PATCH JSON responses |

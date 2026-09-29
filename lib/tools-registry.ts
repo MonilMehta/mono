@@ -18,10 +18,12 @@ import {
   ScrollText,
   Server,
   ArrowLeftRight,
+  FileText,
 } from 'lucide-react';
 
 export type ToolId =
   | 'json'
+  | 'markdown'
   | 'base64'
   | 'url'
   | 'timestamp'
@@ -51,6 +53,7 @@ export interface ToolDef {
 
 export const TOOLS: ToolDef[] = [
   { id: 'json', label: 'JSON', description: 'Format, validate & explore', category: 'data', icon: Braces, keywords: ['format', 'validate', 'tree', 'api'] },
+  { id: 'markdown', label: 'Markdown', description: 'Write, preview & read beautifully', category: 'data', icon: FileText, keywords: ['md', 'editor', 'viewer', 'notes', 'readme', 'write', 'preview'] },
   { id: 'diff', label: 'Diff', description: 'Compare two texts', category: 'data', icon: GitCompare, keywords: ['compare', 'changes'] },
   { id: 'csv', label: 'CSV', description: 'CSV ↔ JSON ↔ Markdown', category: 'data', icon: Table2, keywords: ['tsv', 'table', 'spreadsheet', 'markdown'] },
   { id: 'typegen', label: 'Schema & Mocks', description: 'Types, schemas & API mocks', category: 'data', icon: FileCode2, keywords: ['typescript', 'interface', 'zod', 'mock', 'factory', 'msw', 'api'] },

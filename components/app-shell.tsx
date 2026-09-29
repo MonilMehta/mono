@@ -13,6 +13,7 @@ import { HomeDashboard } from '@/components/home-dashboard';
 
 const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
   json: dynamic(() => import('@/components/tools/json-tool')),
+  markdown: dynamic(() => import('@/components/tools/markdown-tool')),
   base64: dynamic(() => import('@/components/tools/base64-tool')),
   url: dynamic(() => import('@/components/tools/url-tool')),
   timestamp: dynamic(() => import('@/components/tools/timestamp-tool')),
@@ -33,7 +34,7 @@ const TOOL_COMPONENTS: Record<ToolId, ComponentType> = {
 };
 
 const NAV_GROUPS: { label: string; ids: ToolId[] }[] = [
-  { label: 'Capture', ids: ['json', 'curl', 'mock-api', 'transfer', 'typegen', 'image', 'svg', 'csv'] },
+  { label: 'Capture', ids: ['json', 'markdown', 'curl', 'mock-api', 'transfer', 'typegen', 'image', 'svg', 'csv'] },
   { label: 'Tools', ids: ['blurhash', 'color', 'app-asset', 'deeplink'] },
   { label: 'More', ids: ['base64', 'timestamp', 'url', 'diff', 'regex', 'log'] },
 ];
