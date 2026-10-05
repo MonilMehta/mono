@@ -148,29 +148,29 @@ function PaperShader({ theme }: { theme: FocusTheme }) {
 
           vec3 color;
           #if LIGHT_MODE == 1
-            vec3 stone = vec3(0.79, 0.785, 0.755);
-            vec3 mist = vec3(0.57, 0.65, 0.69);
-            vec3 sage = vec3(0.59, 0.68, 0.63);
-            vec3 blush = vec3(0.76, 0.65, 0.67);
+            vec3 stone = vec3(0.95, 0.95, 0.93);
+            vec3 mist = vec3(0.86, 0.86, 0.84);
+            vec3 sage = vec3(0.82, 0.82, 0.80);
+            vec3 blush = vec3(0.90, 0.89, 0.87);
             color = stone;
             color = mix(color, mist, fieldA * 0.32);
             color = mix(color, sage, fieldB * 0.24);
             color = mix(color, blush, fieldC * 0.17);
             color += vec3(0.12, 0.115, 0.1) * meeting * 0.12;
-            color += vec3(0.08, 0.09, 0.1) * glassEdge;
+            color += vec3(0.09, 0.09, 0.085) * glassEdge;
             color = mix(color, vec3(0.9, 0.89, 0.85), lightSheet * 0.09);
           #else
-            vec3 night = vec3(0.012, 0.017, 0.024);
-            vec3 blue = vec3(0.035, 0.09, 0.16);
-            vec3 teal = vec3(0.035, 0.155, 0.145);
-            vec3 plum = vec3(0.13, 0.055, 0.14);
+            vec3 night = vec3(0.10, 0.10, 0.098);
+            vec3 blue = vec3(0.15, 0.15, 0.145);
+            vec3 teal = vec3(0.21, 0.21, 0.20);
+            vec3 plum = vec3(0.17, 0.17, 0.165);
             color = night;
             color = mix(color, blue, fieldA * 0.68);
             color = mix(color, teal, fieldB * 0.52);
             color = mix(color, plum, fieldC * 0.43);
-            color += vec3(0.055, 0.075, 0.09) * meeting * 0.3;
-            color += vec3(0.025, 0.045, 0.055) * glassEdge;
-            color = mix(color, vec3(0.055, 0.075, 0.11), lightSheet * 0.13);
+            color += vec3(0.075, 0.075, 0.07) * meeting * 0.3;
+            color += vec3(0.04, 0.04, 0.035) * glassEdge;
+            color = mix(color, vec3(0.075, 0.075, 0.07), lightSheet * 0.13);
           #endif
           color *= breath;
 

@@ -11,7 +11,7 @@ interface ToolCardProps {
 export function ToolCard({ children, className = '', minHeight = 'min-h-64' }: ToolCardProps) {
   return (
     <div
-      className={`surface-panel overflow-hidden rounded-[4px] flex flex-col ${minHeight} transition-colors duration-200 ${className}`}
+      className={`surface-panel overflow-hidden rounded-2xl flex flex-col ${minHeight} transition-colors duration-200 ${className}`}
     >
       {children}
     </div>
@@ -32,7 +32,7 @@ export function ToolTextarea({ value, onChange, placeholder, className = '', mon
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`flex-1 resize-none bg-transparent px-5 py-5 text-[14px] leading-7 placeholder-muted-foreground/55 focus:outline-none selection:bg-primary/30 ${mono ? 'font-mono' : 'font-sans'} ${className}`}
+      className={`flex-1 resize-none bg-transparent px-5 py-5 text-[14px] leading-7 placeholder-muted-foreground focus:outline-none selection:bg-primary/30 ${mono ? 'font-mono' : 'font-sans'} ${className}`}
     />
   );
 }
@@ -63,7 +63,7 @@ export function ToolSection({ title, description, actions, children, className =
       {(title || actions) && (
         <div className="flex items-end justify-between gap-4 px-0.5">
           <div className="min-w-0">
-            {title && <h3 className="text-base font-bold tracking-tight text-foreground">{title}</h3>}
+            {title && <h3 className="text-base font-medium tracking-tight text-foreground">{title}</h3>}
             {description && <p className="mt-0.5 text-sm leading-5 text-muted-foreground">{description}</p>}
           </div>
           {actions}
@@ -87,9 +87,9 @@ export function ToolChip({ active, onClick, children, className = '' }: ToolChip
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`rounded-[4px] border px-3 py-1.5 text-xs font-semibold transition-all ${
+      className={`rounded-2xl border px-3 py-1.5 text-xs font-medium transition-colors ${
         active
-          ? 'border-foreground bg-primary text-primary-foreground shadow-[2px_2px_0_var(--foreground)]'
+          ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground'
       } ${className}`}
     >
@@ -109,7 +109,7 @@ export function EmptyState({ icon: Icon, title, description, className = '' }: E
   return (
     <div className={`empty-canvas flex-1 flex flex-col items-center justify-center text-center px-8 py-12 ${className}`}>
       {Icon && (
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[4px] border border-border bg-primary text-primary-foreground shadow-[3px_3px_0_var(--foreground)]">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-border bg-secondary text-primary">
           <Icon size={20} strokeWidth={1.75} />
         </div>
       )}

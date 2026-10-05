@@ -1,31 +1,33 @@
 .workspace {
-  --paper: #efe8dc;
-  --paper-muted: rgba(239, 232, 220, 0.62);
-  --paper-faint: rgba(239, 232, 220, 0.12);
-  --paper-border: rgba(239, 232, 220, 0.14);
-  --ink: #101313;
-  --accent: #e9a86f;
+  --paper: #e8e8e2;
+  --paper-muted: #ababa4;
+  --paper-faint: #e8e8e214;
+  --paper-border: #42423e;
+  --surface: #2e2e2c;
+  --ink: #292927;
+  --accent: #deded6;
   position: relative;
   min-height: 100svh;
   overflow: hidden;
   isolation: isolate;
   color: var(--paper);
-  background: #0b1012;
-  background-image:
-    radial-gradient(circle at 22% 24%, rgba(18, 42, 48, 0.62), transparent 48%),
-    radial-gradient(circle at 78% 72%, rgba(40, 29, 43, 0.42), transparent 52%);
+  background: #242424;
 }
 
 .workspace.light {
-  --paper: #15191b;
-  --paper-muted: rgba(17, 22, 24, 0.65);
-  --paper-faint: rgba(17, 22, 24, 0.1);
-  --paper-border: rgba(17, 22, 24, 0.15);
-  --accent: #52646d;
-  background: #d9dbda;
-  background-image:
-    radial-gradient(circle at 20% 22%, rgba(255, 255, 255, 0.82), transparent 48%),
-    radial-gradient(circle at 80% 74%, rgba(114, 123, 126, 0.2), transparent 54%);
+  --paper: #2e2e2b;
+  --paper-muted: #73736d;
+  --paper-faint: #2e2e2b0d;
+  --paper-border: #dfded7;
+  --surface: #fffefb;
+  --ink: #faf9f5;
+  --accent: #383835;
+  background: #f7f6f2;
+}
+
+.workspace :is(button, a):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .shader,
@@ -42,11 +44,19 @@
   z-index: -4;
   display: block;
   background:
-    radial-gradient(circle at 22% 24%, #142c31, transparent 50%),
-    radial-gradient(circle at 78% 72%, #281e2b, transparent 54%),
-    #0b1012;
+    radial-gradient(circle at 22% 24%, #353532, transparent 50%),
+    radial-gradient(circle at 78% 72%, #2c2c2a, transparent 54%),
+    #242424;
   background-size: 140% 140%;
   animation: ambient-fallback 28s ease-in-out infinite alternate;
+}
+
+.light .shader {
+  background:
+    radial-gradient(circle at 22% 24%, #e9e8e2, transparent 50%),
+    radial-gradient(circle at 78% 72%, #e3e2db, transparent 54%),
+    #f7f6f2;
+  background-size: 140% 140%;
 }
 
 @keyframes ambient-fallback {
@@ -138,21 +148,21 @@
   color: #172023;
   background:
     radial-gradient(circle at 78% 22%, rgba(255, 255, 255, 0.9), transparent 38%),
-    #dce4e3;
+    #f7f6f2;
 }
 
 .sceneTransitionDark {
   color: #e8e4da;
   background:
-    radial-gradient(circle at 78% 22%, rgba(41, 59, 75, 0.62), transparent 40%),
-    #071015;
+    radial-gradient(circle at 78% 22%, rgba(80, 80, 76, 0.4), transparent 40%),
+    #242424;
 }
 
 .transitionIndex {
   display: flex;
   justify-content: space-between;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.15em;
   opacity: 0.5;
@@ -233,7 +243,7 @@
 .sceneIdentity span {
   color: rgba(15, 22, 24, 0.4);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 7px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.13em;
 }
@@ -264,7 +274,7 @@
   color: rgba(15, 22, 24, 0.5);
   background: transparent;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 7px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   cursor: pointer;
@@ -307,7 +317,7 @@
 .iconButton,
 .viewTabs {
   border: 1px solid var(--paper-border);
-  background: rgba(9, 12, 13, 0.34);
+  background: color-mix(in srgb, var(--surface) 75%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -332,7 +342,7 @@
 .utilityButton:hover,
 .iconButton:hover {
   color: var(--paper);
-  background: rgba(239, 232, 220, 0.1);
+  background: var(--paper-faint);
   transform: translateY(-1px);
 }
 
@@ -353,10 +363,10 @@
   padding: 0 11px;
   border: 0;
   border-radius: 999px;
-  color: rgba(239, 232, 220, 0.4);
+  color: var(--paper-muted);
   background: transparent;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   cursor: pointer;
@@ -369,7 +379,7 @@
 
 .viewTabs button.viewActive {
   color: var(--paper);
-  background: rgba(239, 232, 220, 0.11);
+  background: var(--paper-faint);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
@@ -409,9 +419,9 @@
   display: flex;
   justify-content: space-between;
   margin: 0 4px 14px;
-  color: rgba(239, 232, 220, 0.54);
+  color: var(--paper-muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
 }
@@ -428,15 +438,10 @@
   width: 100%;
   aspect-ratio: 1.08;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.075);
+  border: 1px solid var(--paper-border);
   border-radius: clamp(18px, 3vw, 38px);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 49.5%),
-    linear-gradient(180deg, #1c1e1f, #141617);
-  box-shadow:
-    0 34px 80px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.065),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.8);
+  background: var(--surface);
+  box-shadow: 0 14px 40px #10201814;
   transform-style: preserve-3d;
 }
 
@@ -463,17 +468,14 @@
   inset: -1% 1% 0;
   display: grid;
   place-items: center;
-  color: #ececeb;
-  font-family: "Arial Narrow", "Helvetica Neue", var(--font-geist-sans), sans-serif;
+  color: var(--paper);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-variant-numeric: tabular-nums;
   font-size: clamp(128px, 20vw, 292px);
-  font-weight: 760;
-  font-stretch: condensed;
+  font-weight: 500;
   line-height: 0.82;
-  letter-spacing: -0.105em;
-  text-indent: -0.105em;
-  text-shadow:
-    0 1px 0 #fff,
-    0 0 22px rgba(255, 255, 255, 0.045);
+  letter-spacing: -0.07em;
+  text-indent: -0.07em;
   transform-origin: center;
   backface-visibility: hidden;
 }
@@ -489,10 +491,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: #050606;
-  box-shadow:
-    0 -1px rgba(255, 255, 255, 0.035),
-    0 2px 3px rgba(0, 0, 0, 0.7);
+  background: var(--paper-border);
   pointer-events: none;
 }
 
@@ -503,7 +502,7 @@
   width: 5px;
   height: 11px;
   border-radius: 0 2px 2px 0;
-  background: #070808;
+  background: var(--paper-border);
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
 }
 
@@ -518,9 +517,9 @@
 
 .clockSeconds {
   margin: 12px 4px 0;
-  color: rgba(239, 232, 220, 0.34);
+  color: var(--paper-muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: 10px;
   text-align: right;
   text-transform: uppercase;
   letter-spacing: 0.13em;
@@ -531,13 +530,11 @@
   flex-direction: column;
   width: min(760px, 100%);
   padding: 17px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--paper-border);
   border-radius: 25px;
-  color: #ececeb;
-  background: rgba(7, 9, 10, 0.68);
-  box-shadow:
-    0 34px 90px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: var(--paper);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  box-shadow: 0 14px 40px #10201814;
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
 }
@@ -553,9 +550,9 @@
   display: flex;
   gap: 3px;
   padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--paper-border);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.26);
+  background: var(--paper-faint);
 }
 
 .modeTabs button {
@@ -563,22 +560,22 @@
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
-  color: rgba(239, 236, 230, 0.42);
+  color: var(--paper-muted);
   background: transparent;
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: 10px;
   letter-spacing: 0.06em;
   cursor: pointer;
   transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
 }
 
 .modeTabs button:hover {
-  color: rgba(239, 236, 230, 0.72);
+  color: var(--paper-muted);
 }
 
 .modeTabs button.modeActive {
-  color: #f2f0eb;
-  background: rgba(255, 255, 255, 0.105);
+  color: var(--paper);
+  background: var(--paper-faint);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -587,9 +584,9 @@
   align-items: center;
   gap: 7px;
   padding-right: 5px;
-  color: rgba(239, 236, 230, 0.42);
+  color: var(--paper-muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
@@ -599,8 +596,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #d9a06f;
-  box-shadow: 0 0 10px rgba(217, 160, 111, 0.36);
+  background: var(--accent);
 }
 
 .timerReadout {
@@ -620,16 +616,16 @@
 
 .timerFlapGroup > span {
   padding-left: 3px;
-  color: rgba(239, 236, 230, 0.34);
+  color: var(--paper-muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 7px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
 }
 
 .timerColon {
   margin-bottom: 22px;
-  color: rgba(239, 236, 230, 0.26);
+  color: var(--paper-muted);
   font-family: var(--font-geist-sans), sans-serif;
   font-size: clamp(28px, 4vw, 54px);
   font-weight: 300;
@@ -640,15 +636,14 @@
   height: 2px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--paper-faint);
 }
 
 .timerProgress span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #d9a06f;
-  box-shadow: 0 0 14px rgba(217, 160, 111, 0.32);
+  background: var(--accent);
   transition: width 250ms linear;
 }
 
@@ -667,8 +662,8 @@
 }
 
 .timerControls button {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #f0eee9;
+  border: 1px solid var(--paper-border);
+  color: var(--paper);
   cursor: pointer;
   transition: transform 160ms ease, background 160ms ease;
 }
@@ -683,7 +678,7 @@
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.045);
+  background: var(--paper-faint);
 }
 
 .primaryControl {
@@ -695,25 +690,35 @@
   height: 42px;
   padding: 0 18px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--paper-faint);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
 
+.timerControls .primaryControl {
+  border-color: transparent;
+  color: var(--ink);
+  background: var(--accent);
+}
+
+.timerControls .primaryControl:hover {
+  background: color-mix(in srgb, var(--accent) 90%, var(--paper));
+}
+
 .secondaryControl:hover,
 .primaryControl:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--paper) 12%, var(--surface));
 }
 
 .sessionRow {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  color: rgba(239, 236, 230, 0.34);
+  color: var(--paper-muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 7px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
@@ -728,14 +733,14 @@
   place-items: center;
   width: 18px;
   height: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid var(--paper-border);
   border-radius: 50%;
 }
 
 .sessionRow > div > span.sessionDone {
-  border-color: rgba(217, 160, 111, 0.62);
-  color: #e6ad7b;
-  background: rgba(217, 160, 111, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--paper-faint);
 }
 
 .shortcuts {
@@ -744,9 +749,9 @@
   bottom: 22px;
   display: flex;
   gap: 18px;
-  color: rgba(239, 232, 220, 0.28);
+  color: var(--paper-muted);
   font-family: var(--font-geist-mono), monospace;
-  font-size: 8px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -765,60 +770,13 @@
   padding: 0 5px;
   border: 1px solid var(--paper-border);
   border-radius: 5px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--paper-faint);
   font: inherit;
 }
 
 .light .paperOverlay {
   opacity: 0.3;
   mix-blend-mode: multiply;
-}
-
-.light .utilityButton,
-.light .iconButton,
-.light .viewTabs {
-  border-color: rgba(18, 23, 25, 0.16);
-  background: rgba(255, 255, 255, 0.34);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
-}
-
-.light .utilityButton:hover,
-.light .iconButton:hover {
-  color: #111719;
-  background: rgba(255, 255, 255, 0.58);
-}
-
-.light .viewTabs button {
-  color: rgba(16, 21, 23, 0.46);
-}
-
-.light .viewTabs button:hover {
-  color: rgba(16, 21, 23, 0.72);
-}
-
-.light .viewTabs button.viewActive {
-  color: #111719;
-  background: rgba(255, 255, 255, 0.52);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
-}
-
-.light .clockMeta,
-.light .clockSeconds,
-.light .shortcuts {
-  color: rgba(15, 20, 22, 0.48);
-}
-
-.light .timerPanel {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(10, 12, 13, 0.76);
-  box-shadow:
-    0 34px 90px rgba(36, 42, 44, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07);
-}
-
-.light .shortcuts kbd {
-  border-color: rgba(17, 22, 24, 0.16);
-  background: rgba(255, 255, 255, 0.26);
 }
 
 @media (max-width: 980px) {
@@ -902,7 +860,7 @@
 
   .clockMeta {
     margin-bottom: 9px;
-    font-size: 7px;
+    font-size: 10px;
   }
 
   .clockSeconds {
@@ -936,7 +894,7 @@
 
   .modeTabs button {
     padding: 0 8px;
-    font-size: 7px;
+    font-size: 10px;
   }
 
   .timerStatus {

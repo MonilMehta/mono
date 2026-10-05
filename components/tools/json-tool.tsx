@@ -64,6 +64,7 @@ export default function JsonTool() {
   const [isDragging, setIsDragging] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
   const [requiresManualValidation, setRequiresManualValidation] = useState(false);
+  const [repairFailed, setRepairFailed] = useState(false);
   const [workspacePanel, setWorkspacePanel] = useState<'query' | 'transform' | null>(null);
   const [queryInput, setQueryInput] = useState('$');
   const [queryRequest, setQueryRequest] = useState<string | null>(null);
@@ -90,20 +91,12 @@ export default function JsonTool() {
       return true;
     }
 
-    let result = parseJson(trimmed);
-    let source = trimmed;
-    if (!result.ok && json.length <= LARGE_PAYLOAD_CHARS) {
-      const repaired = parseJsonWithRepair(trimmed);
-      if (repaired.ok) {
-        result = repaired;
-        source = repaired.text;
-      }
-    }
+    const result = parseJson(trimmed);
     if (result.ok) {
       const isLargeInput = json.length > LARGE_PAYLOAD_CHARS;
-      const formatted = isLargeInput ? source : JSON.stringify(result.data, null, 2);
-      const nextStats = isLargeInput ? computeLightweightStats(source) : computeStats(source, result.data);
-      if (source !== trimmed) setInput(source);
+      const formatted = isLargeInput ? json : JSON.stringify(result.data, null, 2);
+      const nextStats = isLargeInput ? computeLightweightStats(json) : computeStats(json, result.data);
+      setRepairFailed(false);
       setParseError(null);
       setOutput(formatted);
       setParsedData(result.data);
@@ -143,6 +136,7 @@ export default function JsonTool() {
 
   const handleInputChange = (value: string) => {
     setInput(value);
+    setRepairFailed(false);
     if (!value.trim()) {
       cancelScheduledValidation();
       setParseError(null);
@@ -174,6 +168,7 @@ export default function JsonTool() {
     cancelScheduledValidation();
     skipDebounceRef.current = true;
     setInput(text);
+    setRepairFailed(false);
     if (text.length > MANUAL_VALIDATION_CHARS) {
       setRequiresManualValidation(true);
       setIsValidating(false);
@@ -333,6 +328,7 @@ export default function JsonTool() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setInput('');
+        setRepairFailed(false);
         setParseError(null);
         setStats(null);
         setParsedData(null);
@@ -370,6 +366,15 @@ export default function JsonTool() {
     setStats(computeStats(formatted, nextData));
     setParseError(null);
   }, [cancelScheduledValidation]);
+
+  const tryRepair = () => {
+    const repaired = parseJsonWithRepair(input.trim());
+    if (!repaired.ok) {
+      setRepairFailed(true);
+      return;
+    }
+    loadFileContent(JSON.stringify(repaired.data, null, 2));
+  };
 
   const runTransform = (operation: 'sort' | 'flatten' | 'unflatten' | 'extract' | 'rename' | 'remove') => {
     if (!stats) return;
@@ -531,7 +536,7 @@ export default function JsonTool() {
                     }`}
                   >
                     {parseError
-                      ? errorDisplay
+                      ? `${repairFailed ? 'Could not repair · ' : ''}${errorDisplay}`
                       : requiresManualValidation
                         ? `Large payload ready · ${formatBytes(input.length)} · validate on demand`
                       : stats
@@ -572,6 +577,7 @@ export default function JsonTool() {
                     <button
                       onClick={() => {
                         setInput('');
+                        setRepairFailed(false);
                         setParseError(null);
                         setShowOutput(false);
                         setParsedData(null);
@@ -592,6 +598,14 @@ export default function JsonTool() {
                       className="gum-button ml-2 flex items-center gap-2 px-5 py-2.5 text-sm font-semibold"
                     >
                       Format <ChevronRight size={14} className={`transition-transform ${showOutput ? 'rotate-90' : ''}`} />
+                    </button>
+                  )}
+                  {input && parseError && !isLargePayload && (
+                    <button
+                      onClick={tryRepair}
+                      className="gum-button ml-2 px-4 py-2.5 text-sm font-semibold"
+                    >
+                      Try fixing it
                     </button>
                   )}
                   {requiresManualValidation && (
@@ -778,6 +792,7 @@ export default function JsonTool() {
                     <button
                       onClick={() => {
                         setInput('');
+                        setRepairFailed(false);
                         setParseError(null);
                         setShowOutput(false);
                         setParsedData(null);
@@ -900,11 +915,16 @@ export default function JsonTool() {
                     {parseError.line && (
                       <ErrorSnippet input={input} line={parseError.line} column={parseError.column} />
                     )}
-                    <p className="text-xs text-muted-foreground">
-                      {isLargePayload
-                        ? 'Automatic repair is paused for large payloads because it needs a full source pass.'
-                        : 'No safe automatic repair was found. The source is left unchanged.'}
-                    </p>
+                    {isLargePayload ? (
+                      <p className="text-xs text-muted-foreground">Repair is paused for large payloads because it needs a full source pass.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <button onClick={tryRepair} className="rounded-xl bg-secondary px-4 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary/70">
+                          Try fixing it
+                        </button>
+                        {repairFailed ? <p className="text-xs text-muted-foreground">No safe repair was found. The source is unchanged.</p> : null}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="font-mono text-sm leading-7 text-foreground/85">

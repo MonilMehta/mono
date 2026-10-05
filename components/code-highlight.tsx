@@ -28,7 +28,7 @@ export function CodeHighlight({
       {({ className: prismClassName, style, tokens, getLineProps, getTokenProps }) => (
         <pre
           className={`${prismClassName} overflow-auto font-mono text-[13px] leading-7 ${className}`}
-          style={{ ...style, background: 'transparent' }}
+          style={{ ...style, backgroundColor: 'transparent' }}
         >
           {tokens.map((line, lineIndex) => {
             const lineProps = getLineProps({ line });

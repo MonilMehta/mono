@@ -99,16 +99,19 @@ export function CommandPalette({ open, onClose, onSelect, onToggleTheme, isDark 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.12 }}
-          className="fixed inset-0 z-100 flex items-start justify-center bg-black/65 px-4 pt-[14vh]"
+          className="fixed inset-0 z-100 flex items-start justify-center bg-black/30 backdrop-blur-[4px] px-4 pt-[14vh]"
           onClick={onClose}
         >
           <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
             onClick={(e) => e.stopPropagation()}
-            className="surface-panel flex max-h-[68vh] w-full max-w-xl flex-col overflow-hidden rounded-[4px]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Find a tool"
+            className="command-palette surface-panel flex max-h-[68vh] w-full max-w-xl flex-col overflow-hidden"
           >
             <div className="flex items-center gap-3 border-b border-border px-4 py-4">
               <Search size={16} className="text-muted-foreground shrink-0" />
@@ -116,10 +119,11 @@ export function CommandPalette({ open, onClose, onSelect, onToggleTheme, isDark 
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search tools"
                 placeholder="Search tools…"
                 className="flex-1 bg-transparent text-[15px] focus:outline-none placeholder:text-muted-foreground/50"
               />
-              <kbd className="shrink-0 rounded-[3px] border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">esc</kbd>
+              <kbd className="shrink-0 rounded-md border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">esc</kbd>
             </div>
 
             <div ref={listRef} className="flex-1 overflow-y-auto p-2">
@@ -214,13 +218,13 @@ function ResultRow({
       data-index={index}
       onMouseEnter={onHover}
       onClick={onSelect}
-      className={`flex w-full items-center gap-3 rounded-[4px] px-2.5 py-2 text-left transition-colors ${
+      className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors ${
         active ? 'bg-secondary text-foreground' : 'text-foreground hover:bg-secondary/60'
       }`}
     >
       <div
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border ${
-          active ? 'border-foreground bg-primary text-primary-foreground' : 'border-border bg-secondary text-muted-foreground'
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${
+          active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-muted-foreground'
         }`}
       >
         <Icon size={15} />
@@ -232,7 +236,7 @@ function ResultRow({
         <p className="text-xs text-muted-foreground truncate mt-0.5">{tool.description}</p>
       </div>
       {active && (
-        <kbd className="hidden rounded-[3px] border border-border bg-background/70 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">↵</kbd>
+        <kbd className="hidden rounded-md border border-border bg-background/70 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline">↵</kbd>
       )}
     </button>
   );

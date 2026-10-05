@@ -132,7 +132,7 @@ export default function TransferTool() {
 
           {sendCode ? (
             <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 text-center">
-              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-[4px] border border-foreground bg-primary text-primary-foreground shadow-[3px_3px_0_var(--foreground)]">
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-[4px] border border-border bg-secondary text-primary">
                 <Check size={21} />
               </div>
               <p className="text-[13px] font-semibold text-muted-foreground">Your one-time code</p>

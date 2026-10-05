@@ -288,6 +288,15 @@ function normalizeInvalidEscapes(source: string): string {
   );
 }
 
+function decodeHtmlEntities(source: string): string {
+  return source
+    .replace(/&#(?:x([\da-f]+)|(\d+));/gi, (entity, hex?: string, decimal?: string) => {
+      const codePoint = Number.parseInt(hex ?? decimal ?? '', hex ? 16 : 10);
+      return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : entity;
+    })
+    .replace(/&nbsp;/gi, ' ');
+}
+
 function stripJsonComments(source: string): string {
   let output = '';
   let quote: '"' | "'" | null = null;
@@ -483,10 +492,24 @@ function wrapRootObjects(source: string): string {
   }
 }
 
+function restoreMissingRootBrace(source: string): string {
+  const content = source.trim();
+  for (const candidate of [`{${content}`, `${content}}`, `{${content}}`]) {
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+  return source;
+}
+
 export function repairJson(source: string): JsonRepairResult {
   const stages: { label: string; apply: (value: string) => string }[] = [
     { label: 'removed a byte-order mark', apply: (value) => value.replace(/^\uFEFF/, '') },
     { label: 'removed Markdown code fences', apply: (value) => value.replace(/^\s*```(?:json)?\s*$/gim, '') },
+    { label: 'decoded HTML entities', apply: decodeHtmlEntities },
     { label: 'normalized invalid escapes', apply: normalizeInvalidEscapes },
     { label: 'unwrapped Markdown links', apply: (value) => value.replace(/\[(https?:\/\/[^\]\r\n]+)\]\((https?:\/\/[^)\r\n]+)\)/g, '$2') },
     { label: 'removed comments', apply: stripJsonComments },
@@ -494,6 +517,7 @@ export function repairJson(source: string): JsonRepairResult {
     { label: 'quoted bare property names', apply: quoteBareKeys },
     { label: 'normalized Python literals', apply: normalizePythonLiterals },
     { label: 'removed trailing commas', apply: removeTrailingCommas },
+    { label: 'restored a missing root brace', apply: restoreMissingRootBrace },
     { label: 'wrapped root objects in an array', apply: wrapRootObjects },
   ];
 

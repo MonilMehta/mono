@@ -1,10 +1,11 @@
 'use client';
 
-import { animate, AnimatePresence, LayoutGroup, motion, type PanInfo, useMotionValue } from 'framer-motion';
-import { Archive, ArrowUp, Braces, CheckCircle2, ExternalLink, FileText, GitPullRequest, ImagePlus, Link2, Paperclip, PenTool, RotateCcw, Search, Terminal, X } from 'lucide-react';
+import { animate, AnimatePresence, motion, type PanInfo, useMotionTemplate, useMotionValue, useReducedMotion, useTransform } from 'framer-motion';
+import { Archive, ArrowUp, Braces, CheckCircle2, Circle, ExternalLink, FileText, GitPullRequest, ImagePlus, Link2, Paperclip, PenTool, RotateCcw, Search, Terminal, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { changedRecords, mergeRecords } from '@/lib/artifact-sync';
+import { boardPlacement, boardPosition, nextBoardLayer, BOARD_CARD_WIDTH, type BoardPosition } from '@/lib/task-board';
 
 type ArtifactKind = 'note' | 'image' | 'json' | 'request' | 'svg' | 'github';
 type Priority = 'p0' | 'p1' | 'p2';
@@ -23,6 +24,8 @@ type ArtifactRecord = {
   sourceRepo?: string;
   sourceNumber?: number;
   sourceType?: 'issue' | 'pull request';
+  boardPosition?: BoardPosition;
+  boardLayer?: number;
 };
 
 type Artifact = ArtifactRecord & { imageUrl?: string };
@@ -38,6 +41,9 @@ type DragPreview = {
   angle: number;
   priority: Priority;
   memberIds: string[];
+  height: number;
+  width: number;
+  focused: boolean;
 };
 
 type GitHubResult = {
@@ -60,13 +66,16 @@ const DB_NAME = 'mono-home';
 const STORE_NAME = 'todos';
 const SYNC_CHANNEL_NAME = `${DB_NAME}-sync`;
 const SETTLE_ANGLES = [-1.2, 0.8, -0.45, 1.05, -0.7, 0.4];
-const HANG_OFFSETS = [2, 8, 4, 10, 6, 0];
 const PRIORITIES: Priority[] = ['p0', 'p1', 'p2'];
 const FOCUS_LIMIT = 3;
+const BOARD_CONTENT_TOP = 132;
+const FOCUS_CARD_HEIGHT = 76;
+const FOCUS_DIVIDER_TOP = 168;
+const CARD_SPRING = { type: 'spring', stiffness: 450, damping: 38 } as const;
 const PRIORITY_COLORS: Record<Priority, string> = {
-  p0: '#a78bfa',
-  p1: '#bd9235',
-  p2: '#555b5c',
+  p0: '#475e50',
+  p1: '#70736b',
+  p2: '#8a8d85',
 };
 const TEST_ARTIFACT_IDS = ['sample-json', 'sample-image', 'sample-request', 'sample-study', 'sample-material'];
 
@@ -180,15 +189,11 @@ function KindMark({ kind }: { kind: ArtifactKind }) {
   return <FileText size={12} />;
 }
 
-function StudioCard({
-  kind,
-  label,
-  meta,
-  priority,
-  text,
-  image,
-  imageAlt,
-}: {
+function taskCardHeight(kind: ArtifactKind) {
+  return kind === 'image' ? 286 : kind === 'note' || kind === 'github' ? 220 : 250;
+}
+
+function StudioCard({ kind, label, meta, priority, text, image, imageAlt, focused = false }: {
   kind: ArtifactKind;
   label: string;
   meta: string;
@@ -196,31 +201,26 @@ function StudioCard({
   text?: string;
   image?: string;
   imageAlt?: string;
+  focused?: boolean;
 }) {
   return (
-    <article className={`studio-card studio-card-${kind} group relative flex h-[306px] flex-col`}>
-      <div className="flex h-12 shrink-0 items-center justify-between gap-3 px-4">
-        <div className="flex min-w-0 items-center gap-2 font-mono text-[9px] uppercase tracking-[0.08em] text-foreground/80">
-          <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-foreground/12 bg-black/[0.03] px-2.5 font-mono text-[8px] tracking-[0.08em] text-foreground/70">
-            <span className="h-2 w-2 rounded-full" style={{ background: PRIORITY_COLORS[priority] }} />
-            {priority}
-          </span>
-          <KindMark kind={kind} />
-          <span className="sr-only">{label}</span>
-        </div>
-        <span className="shrink-0 font-mono text-[8px] uppercase tracking-[0.08em] text-foreground/65">{meta}</span>
+    <article className={`task-paper ${focused ? 'is-focused' : ''}`} style={{ height: focused ? FOCUS_CARD_HEIGHT : taskCardHeight(kind) }}>
+      <div className="task-paper-heading">
+        <span className="task-priority">{priority.toUpperCase()}</span>
+        <KindMark kind={kind} />
+        <span className="sr-only">{label}</span>
       </div>
-
-      {image ? (
-        <figure className="flex min-h-0 flex-1 flex-col p-3">
-          <img draggable={false} src={image} alt={imageAlt ?? label} className="min-h-0 flex-1 border border-foreground/10 bg-[#e9e2d6] object-cover" />
-          <figcaption className="sr-only">{imageAlt ?? label}</figcaption>
-        </figure>
-      ) : kind === 'note' ? (
-        <p className="px-5 py-6 font-serif text-[21px] leading-[1.38] tracking-[-0.018em] text-foreground">{text}</p>
+      {focused ? <p className="task-focus-title">{text?.split('\n')[0]}</p> : image ? (
+        <div className="task-paper-image">
+          <img draggable={false} src={image} alt={imageAlt ?? label} />
+          <p>{text}</p>
+        </div>
+      ) : kind === 'note' || kind === 'github' ? (
+        <div className="task-paper-note"><strong>{text?.split("\n")[0]}</strong>{text?.includes("\n") && <p>{text.split("\n").slice(1).join("\n")}</p>}</div>
       ) : (
-        <pre className="min-h-0 flex-1 overflow-hidden whitespace-pre-wrap break-words px-4 py-5 font-mono text-[9px] leading-[1.75] text-foreground/85">{text}</pre>
+        <pre className="task-paper-code">{text}</pre>
       )}
+      {!focused && <div className="task-paper-meta"><KindMark kind={kind} /><span>{meta === 'Just now' ? label : meta}</span></div>}
     </article>
   );
 }
@@ -232,14 +232,13 @@ export function HomeDashboard() {
   const [pendingImageUrl, setPendingImageUrl] = useState<string>();
   const [draftPriority, setDraftPriority] = useState<Priority>('p1');
   const [cardQuery, setCardQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [discardingId, setDiscardingId] = useState<string>();
   const [draggingId, setDraggingId] = useState<string>();
-  const [dragAtShredder, setDragAtShredder] = useState(false);
+  const [dragAtBin, setDragAtBin] = useState(false);
   const [dragAtArchive, setDragAtArchive] = useState(false);
+  const [stackTargetId, setStackTargetId] = useState<string>();
   const [dragPreview, setDragPreview] = useState<DragPreview>();
-  const [returningFocusId, setReturningFocusId] = useState<string>();
   const [drawerView, setDrawerView] = useState<'archive' | 'completed' | null>(null);
   const [githubOpen, setGithubOpen] = useState(false);
   const [githubUsername, setGithubUsername] = useState('');
@@ -249,13 +248,25 @@ export function HomeDashboard() {
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const shredderRef = useRef<HTMLDivElement>(null);
+  const binRef = useRef<HTMLDivElement>(null);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [boardWidth, setBoardWidth] = useState(0);
+  const reducedMotion = useReducedMotion();
   const archiveRef = useRef<HTMLButtonElement>(null);
   const dragProxyRefs = useRef(new Map<string, HTMLDivElement>());
   const dragOriginRef = useRef({ x: 0, y: 0 });
+  const dragSessionRef = useRef(0);
+  const instantMoveRef = useRef(false);
+  const arrivingIdRef = useRef<string | undefined>(undefined);
+  const linkOnDropRef = useRef(false);
   const dragOffsetRef = useRef({ x: 125, y: 153 });
   const previewX = useMotionValue(0);
   const previewY = useMotionValue(0);
+  const previewTilt = useMotionValue(0);
+  const previewScale = useMotionValue(1);
+  const previewLiftTransform = useMotionTemplate`scale(${previewScale}) rotate(${previewTilt}deg)`;
+  const previewShadow = useTransform(previewScale, [1, 1.03], [0, 1]);
+  const previewTransform = useMotionTemplate`translate3d(${previewX}px, ${previewY}px, 0)`;
   const artifactsRef = useRef<Artifact[]>([]);
   const imageUrlsRef = useRef<string[]>([]);
   const saveQueueRef = useRef(Promise.resolve());
@@ -302,6 +313,15 @@ export function HomeDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const observer = new ResizeObserver(() => setBoardWidth(board.clientWidth));
+    observer.observe(board);
+    setBoardWidth(board.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+
   function commitArtifacts(update: (current: Artifact[]) => Artifact[]) {
     if (!isReady) return;
     const current = artifactsRef.current;
@@ -342,19 +362,21 @@ export function HomeDashboard() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function addArtifact() {
+  function addArtifact(withMotion = false) {
     const text = draft.trim();
     if (!isReady || (!text && !pendingImage)) return;
 
     const imageUrl = pendingImage ? URL.createObjectURL(pendingImage) : undefined;
     if (imageUrl) imageUrlsRef.current.push(imageUrl);
     const id = crypto.randomUUID();
+    arrivingIdRef.current = withMotion ? id : undefined;
     commitArtifacts((current) => {
       const prepared = draftPriority === 'p0' ? makeRoomForFocus(current, id) : current;
       return [{
         id,
-        text: text || 'Untitled reference',
+        text: text || 'Untitled task',
         createdAt: Date.now(),
+        boardLayer: nextBoardLayer(current),
         image: pendingImage ?? undefined,
         imageUrl,
         kind: detectKind(text, Boolean(pendingImage)),
@@ -384,20 +406,11 @@ export function HomeDashboard() {
         : [id];
       const next = cyclePriority(artifact.priority ?? 'p2');
       const prepared = next === 'p0' ? makeRoomForFocus(current, stackKey) : current;
+      const boardLayer = nextBoardLayer(current);
       return prepared.map((item) => {
-        if (memberIds.includes(item.id)) return { ...item, priority: next };
+        if (memberIds.includes(item.id)) return { ...item, priority: next, boardLayer };
         return item;
       });
-    });
-  }
-
-  function returnToWall(id: string) {
-    setReturningFocusId(id);
-    commitArtifacts((current) => {
-      const artifact = current.find((item) => item.id === id);
-      if (!artifact) return current;
-      const stackKey = artifact.stackId ?? artifact.id;
-      return current.map((item) => (item.stackId ?? item.id) === stackKey ? { ...item, priority: 'p1' } : item);
     });
   }
 
@@ -412,7 +425,7 @@ export function HomeDashboard() {
     commitArtifacts((current) => current.map((artifact) => ids.includes(artifact.id) ? { ...artifact, archived: false, completed: true } : artifact));
     setDiscardingId(undefined);
     setDraggingId(undefined);
-    setDragAtShredder(false);
+    setDragAtBin(false);
     setDragPreview(undefined);
   }
 
@@ -435,10 +448,9 @@ export function HomeDashboard() {
         : [target.id];
       const stackId = target.stackId ?? target.id;
       const linkedIds = new Set([...sourceIds, ...targetIds]);
-      return current.map((artifact) => linkedIds.has(artifact.id) ? { ...artifact, stackId } : artifact);
+      const boardLayer = Math.max(...current.filter((artifact) => linkedIds.has(artifact.id)).map((artifact) => artifact.boardLayer ?? 0));
+      return current.map((artifact) => linkedIds.has(artifact.id) ? { ...artifact, stackId, boardLayer } : artifact);
     });
-    setDraggingId(undefined);
-    setDragPreview(undefined);
   }
 
   async function connectGithub() {
@@ -499,6 +511,7 @@ export function HomeDashboard() {
       id: crypto.randomUUID(),
       text: item.title,
       createdAt: Date.now(),
+      boardLayer: nextBoardLayer(current),
       kind: 'github',
       priority: 'p1',
       archived: false,
@@ -512,91 +525,142 @@ export function HomeDashboard() {
   }
 
   function getPreviewPosition(point: PanInfo['point']) {
-    return {
-      x: Math.min(Math.max(point.x - dragOffsetRef.current.x, 8), window.innerWidth - 258),
-      y: Math.min(Math.max(point.y - dragOffsetRef.current.y, 8), window.innerHeight - 314),
-    };
+    return { x: point.x - dragOffsetRef.current.x, y: point.y - dragOffsetRef.current.y };
   }
 
-  function isNearShredder(point: PanInfo['point']) {
-    const bounds = shredderRef.current?.getBoundingClientRect();
-    return Boolean(
-      bounds &&
-      point.x >= bounds.left - 92 &&
-      point.x <= bounds.right + 64 &&
-      point.y >= bounds.top - 132 &&
-      point.y <= bounds.bottom + 32
-    );
+  function isNearBin(point: PanInfo['point']) {
+    const bounds = binRef.current?.getBoundingClientRect();
+    return Boolean(bounds && point.x >= bounds.left && point.x <= bounds.right && point.y >= bounds.top && point.y <= bounds.bottom);
   }
 
   function isNearArchive(point: PanInfo['point']) {
     const bounds = archiveRef.current?.getBoundingClientRect();
-    return Boolean(
-      bounds &&
-      point.x >= bounds.left - 54 &&
-      point.x <= bounds.right + 84 &&
-      point.y >= bounds.top - 110 &&
-      point.y <= bounds.bottom + 30
-    );
+    return Boolean(bounds && point.x >= bounds.left - 8 && point.x <= bounds.right + 8 && point.y >= bounds.top - 8 && point.y <= bounds.bottom + 8);
   }
 
-  function updateDrag(id: string, info: PanInfo) {
+  function stackTargetAt(point: PanInfo['point'], memberIds: string[]) {
+    let target: Artifact | undefined;
+    let highestLayer = -1;
+    for (const artifact of artifactsRef.current) {
+      if (artifact.archived || artifact.completed || memberIds.includes(artifact.id)) continue;
+      const card = dragProxyRefs.current.get(artifact.id)?.parentElement;
+      const bounds = card?.getBoundingClientRect();
+      const layer = Number(card?.style.zIndex ?? -1);
+      if (bounds && layer > highestLayer && point.x >= bounds.left && point.x <= bounds.right && point.y >= bounds.top && point.y <= bounds.bottom) {
+        target = artifact;
+        highestLayer = layer;
+      }
+    }
+    return target;
+  }
+
+  function pickUpCard(preview: DragPreview, info?: PanInfo, link = false) {
+    const bounds = dragProxyRefs.current.get(preview.id)?.parentElement?.getBoundingClientRect();
+    if (!bounds) return false;
+    dragSessionRef.current += 1;
+    instantMoveRef.current = false;
+    previewX.stop(); previewY.stop(); previewTilt.stop(); previewScale.stop();
+    previewTilt.set(0); previewScale.set(1);
+    if (!reducedMotion) void animate(previewScale, 1.03, CARD_SPRING);
+    dragOffsetRef.current = info ? { x: info.point.x - info.offset.x - bounds.left, y: info.point.y - info.offset.y - bounds.top } : { x: bounds.width / 2, y: bounds.height / 2 };
+    dragOriginRef.current = { x: bounds.left, y: bounds.top };
+    linkOnDropRef.current = link;
+    previewX.set(bounds.left + (info?.offset.x ?? 0)); previewY.set(bounds.top + (info?.offset.y ?? 0));
+    setDraggingId(preview.id); setDiscardingId(undefined);
+    setDragAtBin(false); setDragAtArchive(false); setStackTargetId(undefined);
+    setDragPreview(preview);
+    const boardLayer = nextBoardLayer(artifactsRef.current);
+    commitArtifacts((current) => current.map((item) => preview.memberIds.includes(item.id) ? { ...item, boardLayer } : item));
+    return true;
+  }
+
+  function settleCard(position: { x: number; y: number }, velocity: PanInfo['velocity'], session: number) {
+    void Promise.all([
+      animate(previewX, position.x, reducedMotion ? { duration: 0 } : { ...CARD_SPRING, velocity: velocity.x }),
+      animate(previewY, position.y, reducedMotion ? { duration: 0 } : { ...CARD_SPRING, velocity: velocity.y }),
+      animate(previewTilt, 0, reducedMotion ? { duration: 0 } : CARD_SPRING),
+      animate(previewScale, 1, reducedMotion ? { duration: 0 } : CARD_SPRING),
+    ]).then(() => {
+      if (session !== dragSessionRef.current) return;
+      setDraggingId(undefined); setDragPreview(undefined);
+    });
+  }
+
+  function putAwayCard(preview: DragPreview, destination: 'archive' | 'completed') {
+    const bounds = (destination === 'archive' ? archiveRef.current : binRef.current)?.getBoundingClientRect();
+    if (!bounds) return;
+    const session = dragSessionRef.current;
+    setDragAtBin(destination === 'completed'); setDragAtArchive(destination === 'archive');
+    setStackTargetId(undefined); setDiscardingId(preview.id);
+    void animate(previewTilt, 0, reducedMotion ? { duration: 0 } : CARD_SPRING);
+    commitArtifacts((current) => current.map((item) => preview.memberIds.includes(item.id)
+      ? { ...item, archived: destination === 'archive', completed: destination === 'completed' } : item));
+    const transition = { duration: reducedMotion ? 0.1 : 0.32, ease: [0.77, 0, 0.175, 1] as const };
+    void Promise.all([
+      animate(previewX, reducedMotion ? previewX.get() : bounds.left + bounds.width / 2 - preview.width / 2, transition),
+      animate(previewY, reducedMotion ? previewY.get() : bounds.top + (destination === 'archive' ? bounds.height / 2 : 34) - preview.height / 2, transition),
+    ]).then(() => {
+      if (session !== dragSessionRef.current) return;
+      setDiscardingId(undefined); setDraggingId(undefined); setDragAtBin(false); setDragAtArchive(false); setDragPreview(undefined);
+    });
+  }
+
+  function updateDrag(info: PanInfo) {
     const position = getPreviewPosition(info.point);
     previewX.set(position.x);
     previewY.set(position.y);
-    const near = isNearShredder(info.point);
-    setDragAtShredder((current) => current === near ? current : near);
-    const nearArchive = !near && isNearArchive(info.point);
-    setDragAtArchive((current) => current === nearArchive ? current : nearArchive);
+    if (!reducedMotion) void animate(previewTilt, Math.max(-4, Math.min(4, info.velocity.x / 250)), CARD_SPRING);
+    const nearBin = isNearBin(info.point);
+    setDragAtBin(nearBin);
+    const nearArchive = !nearBin && isNearArchive(info.point);
+    setDragAtArchive(nearArchive);
+    if (!reducedMotion && (nearBin !== dragAtBin || nearArchive !== dragAtArchive)) {
+      void animate(previewScale, nearBin || nearArchive ? 0.94 : 1.03, CARD_SPRING);
+    }
+    setStackTargetId(linkOnDropRef.current && !nearBin && !nearArchive && dragPreview
+      ? stackTargetAt(info.point, dragPreview.memberIds)?.id : undefined);
   }
 
-  function finishDrag(id: string, info: PanInfo) {
-    const shouldDiscard = isNearShredder(info.point);
-    if (shouldDiscard) {
-      setDragAtShredder(true);
-      setDiscardingId(id);
+  function finishDrag(info: PanInfo) {
+    if (!dragPreview) return;
+    const session = dragSessionRef.current;
+    setStackTargetId(undefined);
+    if (isNearBin(info.point)) {
+      putAwayCard(dragPreview, 'completed');
       return;
     }
-
-    if (dragPreview && isNearArchive(info.point) && artifacts.some((artifact) => artifact.id === id)) {
-      const bounds = archiveRef.current?.getBoundingClientRect();
-      if (bounds) {
-        setDragAtArchive(true);
-        void Promise.all([
-          animate(previewX, bounds.left + 18, { duration: 0.32, ease: [0.22, 1, 0.36, 1] }),
-          animate(previewY, bounds.top - 20, { duration: 0.32, ease: [0.22, 1, 0.36, 1] }),
-        ]).then(() => archiveArtifacts(dragPreview.memberIds));
+    if (isNearArchive(info.point)) {
+      putAwayCard(dragPreview, 'archive');
+      return;
+    }
+    // Free placement is the default; linking remains an explicit Shift-drag.
+    if (linkOnDropRef.current) {
+      const target = stackTargetAt(info.point, dragPreview.memberIds);
+      const bounds = target && dragProxyRefs.current.get(target.id)?.parentElement?.getBoundingClientRect();
+      if (target && bounds) {
+        linkArtifacts(dragPreview.memberIds, target.id);
+        settleCard({ x: bounds.left, y: bounds.top }, info.velocity, session);
         return;
       }
     }
-
-    if (dragPreview && artifacts.some((artifact) => artifact.id === id)) {
-      const target = artifacts.find((artifact) => {
-        if (artifact.archived || artifact.completed || dragPreview.memberIds.includes(artifact.id)) return false;
-        const bounds = dragProxyRefs.current.get(artifact.id)?.getBoundingClientRect();
-        return Boolean(bounds && info.point.x >= bounds.left && info.point.x <= bounds.right && info.point.y >= bounds.top && info.point.y <= bounds.bottom);
-      });
-      if (target) {
-        const bounds = dragProxyRefs.current.get(target.id)?.getBoundingClientRect();
-        if (bounds) {
-          void Promise.all([
-            animate(previewX, bounds.left + 10, { duration: 0.28, ease: [0.22, 1, 0.36, 1] }),
-            animate(previewY, bounds.top + 10, { duration: 0.28, ease: [0.22, 1, 0.36, 1] }),
-          ]).then(() => linkArtifacts(dragPreview.memberIds, target.id));
-          return;
-        }
-      }
+    const board = boardRef.current;
+    const bounds = board?.getBoundingClientRect();
+    if (board && bounds && info.point.x >= bounds.left && info.point.x <= bounds.right && info.point.y >= bounds.top && info.point.y <= bounds.bottom) {
+      const position = getPreviewPosition(info.point);
+      const savedPosition = boardPosition(position.x - bounds.left - board.clientLeft, position.y - bounds.top - board.clientTop - BOARD_CONTENT_TOP, board.clientWidth, board.clientHeight - BOARD_CONTENT_TOP, taskCardHeight(dragPreview.kind));
+      if (!dragPreview.focused) commitArtifacts((current) => current.map((item) => dragPreview.memberIds.includes(item.id)
+        ? { ...item, boardPosition: savedPosition } : item));
+      const placed = boardPlacement(0, board.clientWidth, savedPosition);
+      // Use the saved destination, never an intermediate layout-animation frame.
+      settleCard(dragPreview.focused ? dragOriginRef.current : {
+        x: bounds.left + board.clientLeft + placed.left,
+        y: bounds.top + board.clientTop + BOARD_CONTENT_TOP + placed.top,
+      }, info.velocity, session);
+    } else {
+      settleCard(dragOriginRef.current, info.velocity, session);
     }
-
-    setDragAtShredder(false);
+    setDragAtBin(false);
     setDragAtArchive(false);
-    void Promise.all([
-      animate(previewX, dragOriginRef.current.x, { duration: 0.36, ease: [0.22, 1, 0.36, 1] }),
-      animate(previewY, dragOriginRef.current.y, { duration: 0.36, ease: [0.22, 1, 0.36, 1] }),
-    ]).then(() => {
-      setDraggingId(undefined);
-      setDragPreview(undefined);
-    });
   }
 
   const activeArtifacts = artifacts.filter((artifact) => !artifact.archived && !artifact.completed);
@@ -616,326 +680,157 @@ export function HomeDashboard() {
   const focusedIds = new Set(focusGroups.flatMap((group) => group.map((artifact) => artifact.id)));
   const wallArtifacts = activeGroups.filter((group) => !focusedIds.has(group[0].id)).map((group) => group[0]);
   const wallItems = wallArtifacts;
-  const wallWidth = Math.max(1220, activeGroups.length * 276 + 96);
+  const boardItems = [...focusGroups.map((group) => group[0]), ...wallItems];
+  const focusCardWidth = Math.max(1, (boardWidth - 88) / FOCUS_LIMIT);
+  const wallIds = wallItems.map((item) => item.id).join(',');
+  const boardHeight = Math.max(400, ...wallItems.map((item, index) => BOARD_CONTENT_TOP + boardPlacement(index, boardWidth, item.boardPosition).top + taskCardHeight(item.kind ?? 'note') + 80));
+
+  useEffect(() => {
+    if (!isReady || !boardWidth) return;
+    const positions = new Map<string, BoardPosition>();
+    const occupied = wallItems.filter((item) => item.boardPosition).map((item, index) => boardPlacement(index, boardWidth, item.boardPosition));
+    wallItems.filter((item) => !item.boardPosition).forEach((item) => {
+      let slot = 0;
+      let point = boardPlacement(slot, boardWidth);
+      while (occupied.some((other) => Math.abs(other.left - point.left) < 240 && Math.abs(other.top - point.top) < 240)) {
+        point = boardPlacement(++slot, boardWidth);
+      }
+      occupied.push(point);
+      positions.set(item.stackId ?? item.id, boardPosition(point.left, point.top, boardWidth, Infinity, taskCardHeight(item.kind ?? 'note')));
+    });
+    if (positions.size) commitArtifacts((current) => current.map((item) => {
+      const position = positions.get(item.stackId ?? item.id);
+      return position ? { ...item, boardPosition: position } : item;
+    }));
+  // New and restored tasks get an unused starting spot; saved positions never shift.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, boardWidth, wallIds]);
+
   return (
-    <section className="studio-room relative min-h-dvh overflow-hidden pb-16">
-      <img aria-hidden="true" src="/studio-assets/landscape.jpg" className="studio-landscape" style={{ height: 'calc(100% - 185px)' }} />
-
-      <div className="absolute right-6 top-5 z-50 flex items-center gap-2 sm:right-10">
-        <div>
-          <button
-            onClick={() => setGithubOpen((open) => !open)}
-            className={`flex h-9 items-center gap-2 border-b px-2.5 font-mono text-[9px] transition-colors ${githubOpen ? 'border-primary/55 text-primary' : 'border-foreground/14 text-foreground/48 hover:text-foreground'}`}
-            aria-label="Open GitHub inbox"
-          >
-            <GitPullRequest size={13} />
-            <span className="hidden sm:inline">{githubConnectedUsername ? `@${githubConnectedUsername}` : 'GitHub'}</span>
-          </button>
+    <section className="task-workspace">
+      <header className="task-header">
+        <div><h1>My tasks</h1><p>{activeArtifacts.length} open · a place to put things in order</p></div>
+        <div className="task-header-actions">
+          <button onClick={() => setGithubOpen((open) => !open)} className="task-control" aria-label="Open GitHub inbox"><GitPullRequest size={15} /><span>{githubConnectedUsername ? `@${githubConnectedUsername}` : 'GitHub inbox'}</span></button>
+          <label className="task-search"><Search size={15} /><input aria-label="Search tasks" placeholder="Search tasks…" value={cardQuery} onChange={(event) => setCardQuery(event.target.value)} /></label>
         </div>
-        <div className="flex h-9 items-center border-b border-foreground/14 text-foreground/48">
-          <button onClick={() => setSearchOpen((open) => {
-            if (open) setCardQuery('');
-            return !open;
-          })} className={`flex h-8 w-8 items-center justify-center transition-colors hover:text-foreground ${searchOpen ? 'text-primary' : ''}`} aria-label="Search cards" title="Search cards">
-            <Search size={13} />
-          </button>
-          <AnimatePresence initial={false}>
-            {searchOpen && (
-              <motion.label initial={{ width: 0, opacity: 0 }} animate={{ width: 190, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="flex min-w-0 items-center overflow-hidden">
-                <input autoFocus aria-label="Search the wall" value={cardQuery} onChange={(event) => setCardQuery(event.target.value)} placeholder="Search the wall…" className="w-[170px] bg-transparent font-mono text-[10px] outline-none placeholder:text-foreground/36" />
-                {cardQuery && <button onClick={() => setCardQuery('')} aria-label="Clear search"><X size={11} /></button>}
-              </motion.label>
-            )}
-          </AnimatePresence>
+      </header>
+
+      <div className="task-capture">
+        {pendingImageUrl && <div className="task-attachment-preview"><img src={pendingImageUrl} alt="New task attachment" /><button onClick={clearAttachment} aria-label="Remove attachment"><X size={14} /></button></div>}
+        <textarea id="capture-draft" aria-label="Add a task" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Add a thought or attach a screenshot…" rows={2} onKeyDown={(event) => {
+          if (event.key !== 'Enter' || event.shiftKey) return;
+          event.preventDefault();
+          if (event.metaKey || event.ctrlKey) setDraftPriority((current) => cyclePriority(current));
+          else addArtifact();
+        }} />
+        <div className="task-capture-actions">
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) setAttachment(file); }} />
+          <button onClick={() => fileInputRef.current?.click()} className="task-quiet-button"><ImagePlus size={15} />Attach image</button>
+          <button onClick={() => setDraftPriority((current) => cyclePriority(current))} className="task-quiet-button" aria-label={`Draft priority ${draftPriority}`} title="Command Enter cycles priority">Priority · {draftPriority.toUpperCase()}</button>
+          <button onClick={(event) => addArtifact(event.detail !== 0)} disabled={!isReady || (!draft.trim() && !pendingImage)} className="task-pin-button" aria-label="Pin task"><ArrowUp size={19} /></button>
         </div>
       </div>
 
-      <div className="relative z-[2] mx-auto w-full max-w-[1320px] px-6 pb-3 pt-14 sm:px-10 lg:pt-20">
-          <div className="capture-desk relative w-full">
-            {pendingImageUrl && (
-              <div className="relative mb-4 w-fit">
-                <img src={pendingImageUrl} alt="New artifact preview" className="max-h-24 max-w-44 border border-border bg-card object-contain p-1" />
-                <button onClick={clearAttachment} className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm hover:text-foreground" aria-label="Remove attachment">
-                  <X size={11} />
-                </button>
-              </div>
-            )}
-
-            <label htmlFor="capture-draft" className="sr-only">Pin a reference</label>
-            <textarea
-              id="capture-draft"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Enter' || event.shiftKey) return;
-                event.preventDefault();
-                if (event.metaKey || event.ctrlKey) {
-                  setDraftPriority((current) => cyclePriority(current));
-                  return;
-                }
-                addArtifact();
-              }}
-              placeholder={'Add a thought\nor attach a screenshot…'}
-              rows={3}
-              className="min-h-[92px] w-full resize-none bg-transparent font-mono text-[14px] leading-8 outline-none placeholder:text-foreground/58"
-            />
-
-            <div className="flex items-center justify-between gap-4 border-t border-foreground/10 pt-4">
-              <div className="flex items-center gap-4">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) setAttachment(file);
+      <div className="task-board-frame">
+      <div className="task-board-scroll">
+        <div ref={boardRef} className="cutting-mat" style={{ height: boardHeight }} aria-label="Task board">
+          <div className="mat-heading"><span>Task board</span><span>{boardItems.length} pinned</span></div>
+          <div className="mat-ruler" aria-hidden="true">{Array.from({ length: Math.max(1, Math.floor(boardWidth / 120)) }, (_, index) => <span key={index}>{index * 5}</span>)}</div>
+          <div className="mat-focus-heading"><h2>Today <span>P0</span></h2><span>{focusGroups.length} / {FOCUS_LIMIT}</span></div>
+          <div className="mat-focus-divider" style={{ top: FOCUS_DIVIDER_TOP }} aria-hidden="true" />
+          {!boardItems.length && <div className="task-board-empty"><FileText size={28} strokeWidth={1.3} /><h2>{isReady ? 'Pin your first task' : 'Opening your board…'}</h2><p>Capture a thought above, then arrange it here.</p></div>}
+          <AnimatePresence>
+            {boardItems.map((item, index) => {
+              const kind = item.kind ?? 'note';
+              const members = artifactGroups.get(item.stackId ?? item.id) ?? [item];
+              const memberIds = members.map((member) => member.id);
+              const priority = item.priority ?? 'p2';
+              const label = kind === 'github' ? item.sourceType ?? 'GitHub' : kind;
+              const meta = kind === 'github' ? `${item.sourceRepo?.split('/').pop() ?? 'repo'} #${item.sourceNumber}` : 'Just now';
+              const text = formatArtifactText(item);
+              const angle = SETTLE_ANGLES[index % SETTLE_ANGLES.length];
+              const focusIndex = focusGroups.findIndex((group) => group[0].id === item.id);
+              const focused = focusIndex >= 0;
+              const width = focused ? focusCardWidth : BOARD_CARD_WIDTH;
+              const height = focused ? FOCUS_CARD_HEIGHT : taskCardHeight(kind);
+              const wallPosition = boardPlacement(Math.max(0, index - focusGroups.length), boardWidth, item.boardPosition);
+              const position = focused ? { left: 28 + focusIndex * (focusCardWidth + 16), top: 82 } : { left: wallPosition.left, top: wallPosition.top + BOARD_CONTENT_TOP };
+              const muted = Boolean(cardQuery.trim()) && !`${label} ${meta} ${text}`.toLowerCase().includes(cardQuery.trim().toLowerCase());
+              const stackTarget = stackTargetId === item.id;
+              const preview: DragPreview = { id: item.id, kind, label, meta, text, image: item.imageUrl, imageAlt: item.text, angle, priority, memberIds, height, width, focused };
+              return <motion.div key={item.id} layout="position" transition={reducedMotion || instantMoveRef.current || draggingId === item.id ? { duration: 0 } : CARD_SPRING} className={`board-task ${focused ? 'is-focused' : ''} ${stackTarget ? 'is-stack-target' : ''}`} data-task-id={item.id} style={{ left: position.left, top: position.top, width, height, zIndex: item.boardLayer ?? index + 2, opacity: draggingId === item.id ? 0 : 1 }}>
+                <motion.div initial={arrivingIdRef.current === item.id ? { opacity: 0, transform: reducedMotion ? 'none' : `translateY(-18px) scale(0.97) rotate(${angle - 3}deg)` } : false}
+                  animate={{ opacity: muted ? 0.22 : 1, transform: `translateY(${!reducedMotion && stackTarget ? -4 : 0}px) scale(${!reducedMotion && stackTarget ? 1.02 : 1}) rotate(${angle}deg)` }}
+                  transition={reducedMotion ? { duration: 0.1, transform: { duration: 0 } } : { ...CARD_SPRING, opacity: { duration: 0.12 } }} className="board-task-paper">
+                  {members.length > 1 && <motion.div initial={false} animate={{ transform: `rotate(${!reducedMotion && stackTarget ? 5 : 2}deg)` }} transition={reducedMotion ? { duration: 0 } : CARD_SPRING} className="task-paper-stack" />}
+                  <StudioCard kind={kind} label={label} meta={meta} priority={priority} text={text} image={item.imageUrl} imageAlt={item.text} focused={focused} />
+                  <span className="task-pushpin" aria-hidden="true" />
+                </motion.div>
+                <button onClick={(event) => { instantMoveRef.current = event.detail === 0; cycleArtifactPriority(item.id); }} className="board-priority-control" aria-label={`Change priority of ${item.text}, currently ${priority.toUpperCase()}`} title="Cycle P0 / P1 / P2" />
+                {members.length > 1 && <span className="board-stack-count"><Link2 size={11} />{members.length}</span>}
+                <div className="board-task-actions">
+                  <button onClick={(event) => { if (event.detail === 0 || !pickUpCard(preview)) archiveArtifacts(memberIds); else putAwayCard(preview, 'archive'); }} aria-label={`Archive ${item.text}`} title="Archive"><Archive size={15} /></button>
+                  <button onClick={(event) => { if (event.detail === 0 || !pickUpCard(preview)) completeArtifacts(memberIds); else putAwayCard(preview, 'completed'); }} aria-label={`Complete ${item.text}`} title="Complete"><Circle size={19} /></button>
+                </div>
+                {item.sourceUrl && <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="board-source-link" aria-label={`Open ${item.text} on GitHub`}><ExternalLink size={13} /></a>}
+                <motion.div ref={(element) => { if (element) dragProxyRefs.current.set(item.id, element); else dragProxyRefs.current.delete(item.id); }}
+                  className="board-task-drag" role="button" tabIndex={0} aria-label={`Move task: ${item.text}`} title={focused ? 'Change priority to return to the board. Drag to Archive or the bin.' : 'Drag to arrange. Shift-drag to stack. Arrow keys move the task.'}
+                  drag dragSnapToOrigin dragMomentum={false} dragElastic={0}
+                  onKeyDown={(event) => {
+                    instantMoveRef.current = true;
+                    if (focused) {
+                      if (event.key.startsWith('Arrow')) event.preventDefault();
+                      return;
+                    }
+                    const directions: Record<string, [number, number]> = { ArrowLeft: [-16, 0], ArrowRight: [16, 0], ArrowUp: [0, -16], ArrowDown: [0, 16] };
+                    const delta = directions[event.key];
+                    if (!delta) return;
+                    event.preventDefault();
+                    const next = boardPosition(position.left + delta[0], position.top + delta[1] - BOARD_CONTENT_TOP, boardWidth, boardHeight - BOARD_CONTENT_TOP, height);
+                    const boardLayer = nextBoardLayer(artifactsRef.current);
+                    commitArtifacts((current) => current.map((member) => memberIds.includes(member.id) ? { ...member, boardPosition: next, boardLayer } : member));
                   }}
-                />
-                <button onClick={() => fileInputRef.current?.click()} className="inline-flex h-8 items-center gap-2 font-mono text-[9px] text-foreground/72 transition-colors hover:text-foreground">
-                  {pendingImage ? <Paperclip size={13} /> : <ImagePlus size={13} />}
-                  Attach image
-                </button>
-                <span className="hidden h-5 w-px bg-foreground/10 sm:block" />
-                <button
-                  onClick={() => setDraftPriority((current) => cyclePriority(current))}
-                  className="hidden h-7 items-center gap-2 rounded-full border border-foreground/10 bg-black/[0.025] px-2.5 font-mono text-[8px] uppercase tracking-[0.08em] text-foreground/58 sm:flex"
-                  title="⌘/Ctrl + Enter cycles priority"
-                  aria-label={`Draft priority ${draftPriority}. Command Enter cycles priority.`}
-                >
-                  <span className="h-2.5 w-2.5 rounded-full shadow-[0_1px_2px_rgba(20,24,30,0.24)]" style={{ background: PRIORITY_COLORS[draftPriority] }} />
-                  Priority · {draftPriority}
-                </button>
-              </div>
-              <button
-                onClick={addArtifact}
-                disabled={!isReady || (!draft.trim() && !pendingImage)}
-                className="pin-button flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-[transform,opacity] hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55"
-                aria-label="Pin to wall"
-              >
-                <ArrowUp size={18} />
-              </button>
-            </div>
-        </div>
-      </div>
-
-      <LayoutGroup id="studio-focus">
-      <div className="relative z-[3] mx-auto mt-5 h-[88px] w-full max-w-[1320px] px-6 sm:px-10">
-        <AnimatePresence initial={false}>
-          {focusGroups.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 5 }}
-              transition={{ duration: 0.16, ease: 'easeOut' }}
-              className="absolute inset-x-6 top-0 sm:inset-x-10"
-            >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="h-px w-7 bg-primary/70" />
-                <span className="font-serif text-[18px] italic text-foreground/82">Today</span>
-                <span className="font-mono text-[7px] uppercase tracking-[0.14em] text-foreground/42">{focusGroups.length} of {FOCUS_LIMIT} in focus</span>
-              </div>
-              <span className="hidden font-mono text-[7px] uppercase tracking-[0.1em] text-foreground/32 sm:block">Click a reference to return it to the wall</span>
-            </div>
-            <div className="mt-2 flex max-w-[930px] gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {focusGroups.map((group) => {
-                  const item = group[0];
-                  return (
-                    <motion.button
-                      key={item.id}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2, ease: 'easeOut' }}
-                      onClick={() => returnToWall(item.id)}
-                      className="group/focus relative flex h-[56px] min-w-[220px] max-w-[300px] flex-1 items-center gap-3 overflow-hidden border border-foreground/10 bg-[#f5f0e7]/88 px-3 text-left shadow-[0_8px_18px_-17px_rgba(20,24,30,0.65)] transition-transform hover:-translate-y-0.5"
-                      title="Return to the wall as P1"
-                      aria-label={`Return ${item.text} to the wall as P1`}
-                    >
-                      <span className="absolute inset-y-0 left-0 w-[2px] bg-primary" />
-                      <span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2 font-mono text-[7px] uppercase tracking-[0.1em] text-primary">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary" /> P0
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-serif text-[14px] leading-tight text-foreground/88">{item.text}</span>
-                        <span className="mt-1 flex items-center gap-1.5 font-mono text-[7px] uppercase tracking-[0.08em] text-foreground/38">
-                          <KindMark kind={item.kind ?? 'note'} />
-                          {group.length > 1 ? `${group.length} linked` : 'Active reference'}
-                        </span>
-                      </span>
-                      <RotateCcw size={11} className="shrink-0 text-foreground/28 transition-colors group-hover/focus:text-primary" />
-                    </motion.button>
-                );
-              })}
-            </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <motion.div
-        className="relative z-[3] mt-5 overflow-x-auto overflow-y-hidden pb-16 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        <div className="clothesline-track relative min-h-[440px]" style={{ width: `max(100%, ${wallWidth}px)` }}>
-          <div className="clothesline-cord absolute left-0 right-0 top-[34px]" />
-
-          <AnimatePresence mode="popLayout">
-            <div className="relative z-10 flex gap-[26px] px-12">
-              {wallItems.map((item, index) => {
-                const offset = HANG_OFFSETS[index % HANG_OFFSETS.length];
-                const angle = SETTLE_ANGLES[index % SETTLE_ANGLES.length];
-                const kind = item.kind ?? 'note';
-                const members = artifactGroups.get(item.stackId ?? item.id) ?? [item];
-                const memberIds = members.map((member) => member.id);
-                const priority = item.priority ?? 'p2';
-                const label = item.kind === 'github' ? item.sourceType ?? 'GitHub' : kind;
-                const meta = item.kind === 'github' ? `${item.sourceRepo?.split('/').pop() ?? 'repo'} #${item.sourceNumber}` : 'Just now';
-                const text = formatArtifactText(item);
-                const image = item.imageUrl;
-                const imageAlt = item.text;
-                const searchText = `${label} ${meta} ${text ?? ''}`.toLowerCase();
-                const mutedBySearch = Boolean(cardQuery.trim()) && !searchText.includes(cardQuery.trim().toLowerCase());
-
-                return (
-                  <motion.div
-                    key={item.id}
-                    layout="position"
-                    transition={{ layout: { duration: 0.52, ease: [0.22, 1, 0.36, 1] } }}
-                    className="relative w-[250px] shrink-0"
-                    style={{ paddingTop: 40 + offset }}
-                  >
-                    {members.length > 1 && (
-                      <>
-                        <div className="studio-card absolute left-2 z-[4] h-[306px] w-[250px] rotate-[2.4deg] bg-[#e9e1d4]" style={{ top: 44 + offset }} />
-                        <div className="studio-card absolute -left-1 z-[5] h-[306px] w-[250px] -rotate-[1.7deg] bg-[#efe8dc]" style={{ top: 40 + offset }} />
-                      </>
-                    )}
-                    <div aria-hidden="true" className="binder-clip absolute left-1/2 z-20 -translate-x-1/2" style={{ top: 20 + offset }}>
-                      <span className="binder-handle binder-handle-back" />
-                      <span className="binder-handle binder-handle-front" />
-                    </div>
-                    <motion.div
-                      layout
-                      initial={returningFocusId === item.id
-                        ? { opacity: 0, y: -72, scale: 0.94, rotate: 0 }
-                        : { opacity: 0, y: -10, scale: 1, rotate: angle * 2 }}
-                      animate={discardingId === item.id
-                        ? { opacity: 0 }
-                        : { opacity: draggingId === item.id ? 0 : mutedBySearch ? 0.22 : 1, y: mutedBySearch ? 2 : cardQuery ? -6 : 0, scale: 1, rotate: angle, filter: mutedBySearch ? 'saturate(0.35) blur(0.45px)' : 'saturate(1) blur(0px)' }}
-                      exit={{ opacity: 0, y: 12, rotate: angle * 1.4 }}
-                      transition={discardingId === item.id
-                        ? { duration: 0.12, ease: 'easeOut' }
-                        : returningFocusId === item.id
-                          ? { duration: 0.46, delay: 0.18, ease: [0.22, 1, 0.36, 1], layout: { duration: 0.46, ease: [0.22, 1, 0.36, 1] } }
-                          : { duration: 0, layout: { duration: 0.52, ease: [0.22, 1, 0.36, 1] } }}
-                      onAnimationComplete={() => {
-                        if (returningFocusId === item.id) setReturningFocusId(undefined);
-                      }}
-                      className="pointer-events-none relative z-20 w-[250px]"
-                      style={{ transformOrigin: '50% 0' }}
-                    >
-                      <StudioCard
-                        kind={kind}
-                        label={label}
-                        meta={meta}
-                        priority={priority}
-                        text={text}
-                        image={image}
-                        imageAlt={imageAlt}
-                      />
-                    </motion.div>
-                    <button
-                      onClick={() => cycleArtifactPriority(item.id)}
-                      className="absolute left-4 z-30 h-6 w-[48px] rounded-full bg-transparent"
-                      style={{ top: 52 + offset }}
-                      title={`${priority.toUpperCase()} priority · click to cycle`}
-                      aria-label={`${priority.toUpperCase()} priority. Click to cycle.`}
-                    />
-                    {members.length > 1 && (
-                      <span className="absolute right-3 z-30 flex h-6 items-center gap-1 rounded-full border border-foreground/10 bg-[#f5f0e7] px-2 font-mono text-[8px] uppercase shadow-sm" style={{ top: 48 + offset }}>
-                        <Link2 size={9} /> {members.length}
-                      </span>
-                    )}
-                    {item.sourceUrl && (
-                      <a
-                        href={item.sourceUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="absolute right-3 z-30 flex h-8 items-center gap-1.5 border border-foreground/15 bg-[#f5f0e7] px-2.5 font-mono text-[8px] uppercase tracking-[0.06em] text-foreground/70 shadow-sm hover:border-primary/40 hover:text-primary"
-                        style={{ top: 304 + offset }}
-                        aria-label={`Open ${item.text} on GitHub`}
-                      >
-                        Open <ExternalLink size={10} />
-                      </a>
-                    )}
-                    <motion.div
-                      ref={(element) => {
-                        if (element) dragProxyRefs.current.set(item.id, element);
-                        else dragProxyRefs.current.delete(item.id);
-                      }}
-                      aria-hidden="true"
-                      drag
-                      dragSnapToOrigin
-                      dragMomentum={false}
-                      dragElastic={0.04}
-                      onDragStart={(_event, info) => {
-                        const bounds = dragProxyRefs.current.get(item.id)?.getBoundingClientRect();
-                        if (!bounds) return;
-                        dragOffsetRef.current = { x: info.point.x - bounds.left, y: info.point.y - bounds.top };
-                        const position = { x: bounds.left, y: bounds.top };
-                        setDraggingId(item.id);
-                        setDragAtShredder(false);
-                        setDragAtArchive(false);
-                        dragOriginRef.current = position;
-                        previewX.set(position.x);
-                        previewY.set(position.y);
-                        setDragPreview({ id: item.id, kind, label, meta, text, image, imageAlt, angle, priority, memberIds });
-                      }}
-                      onDrag={(_event, info) => updateDrag(item.id, info)}
-                      onDragEnd={(_event, info) => finishDrag(item.id, info)}
-                      className="absolute left-0 z-10 h-[306px] w-[250px] cursor-grab touch-none active:cursor-grabbing"
-                      style={{ top: 40 + offset }}
-                    />
-                  </motion.div>
-                );
-              })}
-            </div>
+                  onDragStart={(event, info) => {
+                    pickUpCard(preview, info, 'shiftKey' in event && event.shiftKey);
+                  }}
+                  onDrag={(_event, info) => updateDrag(info)} onDragEnd={(_event, info) => finishDrag(info)} />
+              </motion.div>;
+            })}
           </AnimatePresence>
         </div>
-      </motion.div>
-      </LayoutGroup>
+      </div>
+          <motion.div ref={binRef} initial={false} animate={{ transform: reducedMotion ? 'none' : discardingId && dragAtBin ? 'translateY(2px) scale(0.96)' : dragAtBin ? 'translateY(-3px) scale(1.04)' : 'translateY(0px) scale(1)' }} transition={reducedMotion ? { duration: 0 } : CARD_SPRING} className={`task-waste-bin ${dragAtBin ? 'is-active' : ''}`} aria-label="Paper waste bin">
+            <svg width="72" height="88" viewBox="0 0 72 88" fill="none" aria-hidden="true">
+              <defs><pattern id="bin-mesh" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0H9V9" stroke="currentColor" strokeWidth="0.65" opacity="0.65" /></pattern></defs>
+              <path d="M10 17L18 76Q36 86 54 76L62 17Z" fill="#20372e" fillOpacity="0.42" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M10 17L18 76Q36 86 54 76L62 17Z" fill="url(#bin-mesh)" />
+              <path d="M25 59L32 51L43 54L48 64L43 74L29 75L23 66Z" fill="#e9e8df" stroke="#b9bbae" />
+              <path d="M32 51L34 64L25 59M34 64L43 74M34 64L48 64" stroke="#b2b5a8" />
+              <motion.ellipse initial={false} animate={{ transform: !reducedMotion && dragAtBin ? 'translateY(-2px) scaleY(1.25)' : 'translateY(0px) scaleY(1)' }} style={{ transformOrigin: '36px 17px' }} transition={reducedMotion ? { duration: 0 } : CARD_SPRING} cx="36" cy="17" rx="26" ry="8" fill="#183c2e" stroke="currentColor" strokeWidth="2" />
+              <path d="M18 76Q36 85 54 76" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            <span>{dragAtBin ? 'Release to discard' : 'Drop to discard'}</span>
+          </motion.div>
+      <footer className="task-board-footer">
+        <motion.button ref={archiveRef} initial={false} animate={{ transform: !reducedMotion && dragAtArchive ? 'translateY(-3px) scale(1.04)' : 'translateY(0px) scale(1)' }} transition={reducedMotion ? { duration: 0 } : CARD_SPRING} onClick={() => setDrawerView((view) => view === 'archive' ? null : 'archive')} className={`task-quiet-button ${dragAtArchive ? 'is-drop-target' : ''}`} aria-label="Open archived items"><Archive size={15} />Archive<span className="task-count">{archivedArtifacts.length}</span></motion.button>
+        <button onClick={() => setDrawerView((view) => view === 'completed' ? null : 'completed')} className="task-quiet-button" aria-label="Open completed items"><CheckCircle2 size={16} />Completed<span className="task-count">{completedArtifacts.length}</span></button>
+      </footer>
+      </div>
 
-      {dragPreview && !discardingId && createPortal(
-        <motion.div
-          key={dragPreview.id}
-          initial={false}
-          animate={dragAtShredder || dragAtArchive ? {
-            scaleX: dragAtArchive ? 0.64 : 0.72,
-            scaleY: dragAtArchive ? 0.64 : 0.72,
-            rotate: dragAtArchive ? -3 : 0,
-            opacity: 1,
-          } : {
-            scaleX: 1,
-            scaleY: 1,
-            rotate: dragPreview.angle,
-            opacity: 1,
-          }}
-          transition={{ duration: dragAtShredder || dragAtArchive ? 0.16 : 0.08, ease: [0.22, 1, 0.36, 1] }}
-          className={dragAtShredder ? 'shredding-sheet' : ''}
-          style={{ position: 'fixed', left: 0, top: 0, x: previewX, y: previewY, zIndex: 1000, width: 250, pointerEvents: 'none', transformOrigin: '50% 50%' }}
-        >
-          <StudioCard
-            kind={dragPreview.kind}
-            label={dragPreview.label}
-            meta={dragPreview.meta}
-            priority={dragPreview.priority}
-            text={dragPreview.text}
-            image={dragPreview.image}
-            imageAlt={dragPreview.imageAlt}
-          />
-        </motion.div>,
-        document.body
-      )}
+      {dragPreview && createPortal(<motion.div key={dragPreview.id}
+        style={{ position: 'fixed', left: 0, top: 0, transform: previewTransform, zIndex: 1000, width: dragPreview.width, pointerEvents: 'none' }}>
+        <motion.div className="task-drag-preview" initial={{ transform: `rotate(${dragPreview.angle}deg)` }}
+          animate={discardingId ? { transform: reducedMotion ? `rotate(${dragPreview.angle}deg)` : `scale(0.08) rotate(${dragAtArchive ? -6 : 16}deg)`, opacity: 0 } : { transform: `rotate(${dragPreview.angle}deg)`, opacity: 1 }}
+          transition={reducedMotion ? { duration: 0.1 } : discardingId ? { duration: 0.32, ease: [0.77, 0, 0.175, 1], opacity: { duration: 0.12, delay: 0.2 } } : CARD_SPRING}>
+          <motion.div className="task-drag-lift" style={{ transform: previewLiftTransform }}>
+            <motion.span className="task-lift-shadow" style={{ opacity: previewShadow }} aria-hidden="true" />
+            {dragPreview.memberIds.length > 1 && <div className="task-paper-stack" />}
+            <StudioCard {...dragPreview} />
+            <span className="task-pushpin" aria-hidden="true" />
+          </motion.div>
+        </motion.div>
+      </motion.div>, document.body)}
 
       {isReady && createPortal(
         <AnimatePresence>
@@ -950,11 +845,11 @@ export function HomeDashboard() {
                 aria-label="Close GitHub inbox"
               />
               <motion.section
-                initial={{ y: '100%' }}
-                animate={{ y: 0 }}
-                exit={{ y: '100%' }}
-                transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                className="fixed inset-x-0 bottom-0 z-[70] max-h-[78dvh] overflow-hidden rounded-t-[12px] border border-b-0 border-border bg-card text-card-foreground shadow-[0_-8px_0_#111] lg:left-[280px]"
+                initial={{ transform: reducedMotion ? 'none' : 'translateY(100%)', opacity: 0 }}
+                animate={{ transform: 'translateY(0%)', opacity: 1 }}
+                exit={{ transform: reducedMotion ? 'none' : 'translateY(100%)', opacity: 0 }}
+                transition={{ duration: reducedMotion ? 0.12 : 0.28, ease: [0.32, 0.72, 0, 1] }}
+                className="fixed inset-x-0 bottom-0 z-[70] max-h-[78dvh] overflow-hidden rounded-t-[12px] border border-b-0 border-border bg-card text-card-foreground task-sheet"
                 role="dialog"
                 aria-modal="true"
                 aria-label="GitHub inbox"
@@ -1066,25 +961,6 @@ export function HomeDashboard() {
 
       {isReady && createPortal(
         <>
-          <div className="fixed bottom-0 left-5 z-[55] flex items-end gap-1 lg:left-[284px]">
-            <button
-              ref={archiveRef}
-              onClick={() => setDrawerView((view) => view === 'archive' ? null : 'archive')}
-              className={`flex h-9 w-[92px] items-center justify-center gap-2 border border-b-0 border-border bg-card text-foreground transition-transform ${dragAtArchive ? 'h-12 -translate-y-1 bg-primary' : ''}`}
-              aria-label="Open archived items"
-            >
-              <Archive size={12} />
-              <span className="font-mono text-[7px] uppercase tracking-[0.12em]">archive {archivedArtifacts.length}</span>
-            </button>
-            <button
-              onClick={() => setDrawerView((view) => view === 'completed' ? null : 'completed')}
-              className="flex h-9 w-[104px] items-center justify-center gap-2 border border-b-0 border-border bg-card text-foreground"
-              aria-label="Open completed items"
-            >
-              <CheckCircle2 size={12} />
-              <span className="font-mono text-[7px] uppercase tracking-[0.12em]">completed {completedArtifacts.length}</span>
-            </button>
-          </div>
           <AnimatePresence>
             {drawerView && (
               <>
@@ -1097,11 +973,11 @@ export function HomeDashboard() {
                   aria-label="Close bottom sheet"
                 />
                 <motion.section
-                  initial={{ y: '100%' }}
-                  animate={{ y: 0 }}
-                  exit={{ y: '100%' }}
-                  transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                  className="fixed inset-x-0 bottom-0 z-[60] max-h-[62dvh] overflow-hidden rounded-t-[12px] border border-b-0 border-border bg-card text-card-foreground shadow-[0_-8px_0_#111] lg:left-[280px]"
+                  initial={{ transform: reducedMotion ? 'none' : 'translateY(100%)', opacity: 0 }}
+                  animate={{ transform: 'translateY(0%)', opacity: 1 }}
+                  exit={{ transform: reducedMotion ? 'none' : 'translateY(100%)', opacity: 0 }}
+                  transition={{ duration: reducedMotion ? 0.12 : 0.28, ease: [0.32, 0.72, 0, 1] }}
+                  className="fixed inset-x-0 bottom-0 z-[60] max-h-[62dvh] overflow-hidden rounded-t-[12px] border border-b-0 border-border bg-card text-card-foreground task-sheet"
                   role="dialog"
                   aria-modal="true"
                   aria-label="Saved items"
@@ -1110,7 +986,7 @@ export function HomeDashboard() {
                   <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-8">
                     <div>
                       <h2 className="text-[20px] font-bold tracking-tight">Saved items</h2>
-                      <p className="mt-0.5 text-[12px] text-muted-foreground">Archive references for later, or restore completed work.</p>
+                      <p className="mt-0.5 text-[12px] text-muted-foreground">Keep tasks for later, or restore completed work.</p>
                     </div>
                     <button onClick={() => setDrawerView(null)} className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-border hover:bg-secondary" aria-label="Close saved items"><X size={16} /></button>
                   </div>
@@ -1147,114 +1023,6 @@ export function HomeDashboard() {
         document.body
       )}
 
-      {dragPreview && discardingId === dragPreview.id && createPortal(
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[1100] flex items-center justify-center bg-[#e9e2d7]/75 px-5 backdrop-blur-[5px]"
-        >
-          <motion.div
-            initial={{ scale: 0.94, y: 12 }}
-            animate={{ scale: 1, y: 0 }}
-            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-            className="relative h-[470px] w-[min(92vw,590px)]"
-          >
-            <motion.div
-              initial={{ y: -62, opacity: 0, scale: 0.78, rotate: dragPreview.angle }}
-              animate={{ y: [-62, -28, 92, 224], opacity: [0, 1, 1, 0], scale: [0.78, 0.78, 0.76, 0.7], rotate: [dragPreview.angle, 0, 0, 0] }}
-              transition={{ duration: 1.62, times: [0, 0.1, 0.5, 0.7], ease: [0.4, 0, 0.75, 1] }}
-              onAnimationComplete={() => completeArtifacts(dragPreview.memberIds)}
-              className="absolute left-1/2 top-0 z-0 w-[250px] -translate-x-1/2 origin-top"
-            >
-              <StudioCard {...dragPreview} />
-            </motion.div>
-
-            <motion.div
-              animate={{ x: [0, -2, 2, -1, 1, 0] }}
-              transition={{ delay: 0.72, duration: 0.48 }}
-              className="absolute inset-x-0 top-[238px] z-20 h-[142px]"
-            >
-              <div className="absolute inset-x-0 top-0 h-14 rounded-t-[26px] border border-[#183047]/25 bg-[#233c54] shadow-[0_18px_32px_-22px_rgba(20,31,42,0.65)]" />
-              <div className="absolute left-1/2 top-[22px] h-3 w-[300px] -translate-x-1/2 rounded-full bg-[#07131e] shadow-[inset_0_2px_3px_rgba(0,0,0,0.7)]" />
-              <div className="absolute left-1/2 top-[34px] flex w-[286px] -translate-x-1/2 justify-center gap-[5px]">
-                {Array.from({ length: 20 }, (_, tooth) => <span key={tooth} className="h-[9px] w-[9px] rotate-45 bg-[#102536]" />)}
-              </div>
-              <div className="absolute inset-x-0 bottom-0 h-[96px] rounded-b-[26px] border border-[#183047]/20 bg-[#eee7dc] shadow-[0_22px_38px_-24px_rgba(20,31,42,0.65)]">
-                <div className="absolute left-1/2 top-5 h-2 w-[242px] -translate-x-1/2 rounded-full bg-[#183047]/70" />
-                <div className="absolute inset-x-0 bottom-5 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#183047]/70">shredding {dragPreview.memberIds.length > 1 ? `${dragPreview.memberIds.length} linked references` : 'reference'}</div>
-              </div>
-            </motion.div>
-
-            <div className="pointer-events-none absolute left-1/2 top-[276px] z-10 h-[190px] w-[250px] -translate-x-1/2 overflow-visible">
-              {Array.from({ length: 12 }, (_, strip) => (
-                <motion.div
-                  key={strip}
-                  initial={{ y: -90, opacity: 0, rotate: 0 }}
-                  animate={{ y: [-90, -28, 72, 184], opacity: [0, 1, 1, 0], rotate: [0, strip % 2 ? -2 : 2, strip % 2 ? -5 : 5, strip % 2 ? -10 : 10] }}
-                  transition={{ duration: 1.02, delay: 0.76 + strip * 0.018, times: [0, 0.2, 0.72, 1], ease: 'easeIn' }}
-                  className="absolute top-0 h-[184px] overflow-hidden border-x border-[#463923]/15 bg-[#f5f0e7] shadow-sm"
-                  style={{ left: `${(strip / 12) * 100}%`, width: `${100 / 12}%` }}
-                >
-                  <div className="absolute top-0 h-[306px] w-[250px]" style={{ left: `-${strip * (250 / 12)}px` }}>
-                    <StudioCard {...dragPreview} />
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </motion.div>,
-        document.body
-      )}
-
-      {isReady && createPortal(
-        <div
-          ref={shredderRef}
-          aria-hidden="true"
-          className={`studio-shredder ${discardingId || (draggingId && dragAtShredder) ? 'is-active' : ''}`}
-          style={{ position: 'fixed', right: 78, bottom: 24, zIndex: 50, width: 84, height: 88, pointerEvents: 'none' }}
-        >
-          <span
-            className="studio-shredder-label"
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', color: '#183047', fontFamily: 'var(--font-geist-mono), monospace', fontSize: 7, letterSpacing: '0.12em', textAlign: 'center', textTransform: 'uppercase' }}
-          >
-            shred
-          </span>
-          <AnimatePresence>
-            {discardingId && (
-              <motion.span
-                key={discardingId}
-                initial={{ y: -34, scaleX: 0.82, scaleY: 1, opacity: 0 }}
-                animate={{ y: [-34, -11, 10], scaleX: [0.82, 0.64, 0.5], scaleY: [1, 0.58, 0.08], opacity: [0, 1, 0] }}
-                transition={{ duration: 0.54, times: [0, 0.44, 1], ease: [0.4, 0, 0.2, 1] }}
-                style={{ position: 'absolute', top: 24, left: 25, zIndex: 2, width: 34, height: 34, border: '1px solid rgba(24, 48, 71, 0.22)', background: '#f7f0e5', boxShadow: 'inset 3px -3px 5px rgba(61, 48, 34, 0.16)' }}
-              />
-            )}
-          </AnimatePresence>
-          <span className="studio-shredder-head" style={{ position: 'absolute', top: 16, left: 0, zIndex: 4, width: 84, height: 24, borderRadius: 3, background: '#183047' }}>
-            <span className="studio-shredder-slot" />
-            <span className="studio-shredder-light" />
-          </span>
-          <span className="studio-shredder-body">
-            {discardingId && Array.from({ length: 11 }, (_, index) => (
-              <motion.span
-                key={index}
-                initial={{ y: -8, height: 0, opacity: 0 }}
-                animate={{
-                  y: [-8, 2, 34],
-                  x: [0, index % 2 === 0 ? -1 : 1, index % 3 === 0 ? -5 : 4],
-                  height: [0, 24 + (index % 4) * 3, 30],
-                  rotate: [0, index % 2 === 0 ? -2 : 2, index % 2 === 0 ? -8 : 7],
-                  opacity: [0, 1, 0],
-                }}
-                transition={{ duration: 0.68, delay: 0.5 + index * 0.018, times: [0, 0.28, 1], ease: [0.4, 0, 0.2, 1] }}
-                style={{ left: 5 + index * 5.4 }}
-              />
-            ))}
-          </span>
-        </div>,
-        document.body
-      )}
     </section>
   );
 }
